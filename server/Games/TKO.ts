@@ -1,6 +1,7 @@
 import { v4 } from 'uuid';
 import { IncomingCommand, OutgoingCommand, SOCKET_EVENTS } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
+import { Player, IGame } from './Game';
 
 export interface TKOProps {
   onCommunicate: OnCommunicateType;
@@ -8,15 +9,7 @@ export interface TKOProps {
 
 export type OnCommunicateType = (playerId: string, payload: OutgoingCommand) => void;
 
-export interface Player {
-  // System Identifiers
-  id: string;
-
-  // Personal info
-  name: string;
-}
-
-export class TKO {
+export class TKO implements IGame {
   players: Player[] = [];
 
   constructor(private options: TKOProps) {}
@@ -28,7 +21,6 @@ export class TKO {
     };
 
     this.players.push(player);
-
     return player;
   }
 

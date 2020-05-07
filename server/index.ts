@@ -4,7 +4,8 @@ import socketIo from 'socket.io';
 import { applyMiddleware } from './middleware';
 import { generateRoomCode } from './util';
 import { TKO, SocketCommunicator } from './Games/TKO';
-import { IncomingCommand, CommandBody, SOCKET_EVENTS, PlayerSocketIdentifierProps } from '../lib/SharedTypes';
+import { CommandBody, SOCKET_EVENTS, PlayerSocketIdentifierProps } from '../lib/SharedTypes';
+import { IGame } from './Games/Game';
 
 const env = {
   port: process.env.PORT || 7024,
@@ -13,7 +14,7 @@ const env = {
 const app = new Koa();
 const router = new Router();
 
-export type GameSetType = { game: TKO };
+export type GameSetType = { game: IGame };
 const gameMap: { [roomCode: string]: GameSetType } = {};
 
 router.post('/:code/join', (ctx, next) => {
