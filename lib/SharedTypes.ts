@@ -1,15 +1,20 @@
-export interface IncomingCommand {
+export interface IncomingCommand extends CommandBody {
   sourcePlayerId: string;
+}
+
+export interface CommandBody {
   type: CommandType;
   metadata: any;
 }
-export interface OutgoingCommand {
-  type: CommandType;
-  metadata: any;
-}
+export interface OutgoingCommand extends CommandBody {}
 
 export type CommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score';
 
 export enum SOCKET_EVENTS {
   COMMAND = 'command',
+  PLAYER_SOCKET_IDENTIFIER = 'player-socket-identifier',
+}
+
+export interface PlayerSocketIdentifierProps {
+  playerId: string;
 }

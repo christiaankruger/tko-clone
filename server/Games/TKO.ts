@@ -36,6 +36,10 @@ export class TKO {
     return !!this.players.find((p) => p.id === playerId);
   }
 
+  playerByName(name: string): Player | undefined {
+    return this.players.find((p) => p.name === name);
+  }
+
   async orchestrate() {
     await this.collectDesigns();
   }
@@ -53,6 +57,10 @@ export class SocketCommunicator {
   constructor(private io: socketIo.Server) {}
 
   register(playerId: string, socketId: string): void {
+    const existing = this.playerIdToSocketId[playerId];
+    if (existing) {
+      // TODO: Close / destroy existing socket.
+    }
     this.playerIdToSocketId[playerId] = socketId;
   }
 
