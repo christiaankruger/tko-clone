@@ -37,7 +37,7 @@ router.post('/:code/join', (ctx, next) => {
   const existingPlayer = set.game.playerByName(name);
   if (existingPlayer) {
     // Player exists. We assume they disconnected and they're just replacing the old one.
-    ctx.body = { playerId: existingPlayer.id };
+    ctx.body = { playerId: existingPlayer.id, gameType: set.game.gameType };
     return next();
   }
 

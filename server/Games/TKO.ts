@@ -1,5 +1,5 @@
 import { v4 } from 'uuid';
-import { IncomingCommand, OutgoingCommand, SOCKET_EVENTS } from '../../lib/SharedTypes';
+import { IncomingCommand, OutgoingCommand, SOCKET_EVENTS, GameType } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
 import { Player, IGame } from './Game';
 
@@ -11,6 +11,7 @@ export type OnCommunicateType = (playerId: string, payload: OutgoingCommand) => 
 
 export class TKO implements IGame {
   players: Player[] = [];
+  gameType: GameType = 'tko';
 
   constructor(private options: TKOProps) {}
 
