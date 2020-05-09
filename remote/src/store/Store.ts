@@ -5,6 +5,7 @@ export enum Pages {
   LOGIN = 'login',
   WAITING = 'waiting',
   DRAW = 'draw',
+  WRITE = 'write',
 }
 
 export interface GameDetails {
@@ -41,6 +42,9 @@ export class Store {
     }
     if (command.type === 'wait') {
       this.goToPage(Pages.WAITING);
+    }
+    if (command.type === 'slogan') {
+      this.goToPage(Pages.WRITE);
     }
   }
 }

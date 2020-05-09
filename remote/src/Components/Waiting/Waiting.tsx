@@ -13,7 +13,7 @@ export const Waiting: FC<WaitingProps> = (props) => {
   return (
     <div className={BEM()}>
       <Heading>
-        Hang tight, <div className={'name'}>{props.name}</div>.
+        Hang tight, <div className={BEM('name')}>{props.name}</div>
       </Heading>
     </div>
   );

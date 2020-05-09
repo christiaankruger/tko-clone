@@ -10,6 +10,7 @@ import { Post } from './store/API';
 import { PlayerJoinResult, SOCKET_EVENTS, CommandResult, CommandType, OutgoingCommand } from '../../lib/SharedTypes';
 import { Waiting } from './Components/Waiting/Waiting';
 import { Draw } from './Components/Draw/Draw';
+import { Write } from './Components/Write/Write';
 
 const socket = SocketIO('http://localhost:7024');
 const store = new Store();
@@ -55,6 +56,16 @@ export class App extends Component {
         <Draw
           onSave={async (asBase64) => {
             const result = await postCommand('design', { base64: asBase64 });
+            store.consumeCommand(result.command);
+          }}
+        />
+      );
+    }
+    if (store.page === Pages.WRITE) {
+      return (
+        <Write
+          onSubmit={async (text) => {
+            const result = await postCommand('slogan', { text });
             store.consumeCommand(result.command);
           }}
         />

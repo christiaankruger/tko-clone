@@ -42,7 +42,8 @@ export class TKO implements IGame {
 
   async orchestrate() {
     await this.collectDesigns();
-    console.log('Got all designs, thanks!');
+    await this.collectSlogans();
+    this.sendToAll({ type: 'wait', metadata: {} });
   }
 
   private async collectDesigns() {
@@ -55,6 +56,20 @@ export class TKO implements IGame {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       // TODO: Emit timer to presenter
       if (this.designs.length === targetDesignCount) {
+        return;
+      }
+    }
+  }
+
+  private async collectSlogans(targetSloganCount: number = Infinity) {
+    this.sendToAll({
+      type: 'slogan',
+      metadata: {},
+    });
+    for (let i = 1; i <= 45; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // TODO: Emit timer to presenter
+      if (this.slogans.length === targetSloganCount) {
         return;
       }
     }
@@ -74,10 +89,23 @@ export class TKO implements IGame {
         metadata: {},
       };
     }
+    if (command.type === 'slogan') {
+      const slogan = new Slogan({
+        createdBy: command.sourcePlayerId,
+        text: command.metadata.text,
+      });
+      console.log(`Created slogan: ${JSON.stringify(slogan, null, 2)}`);
+      this.slogans.push(slogan);
+      return {
+        type: 'slogan',
+        metadata: {},
+      };
+    }
     throw new Error('Girl, what?');
   }
 
   private sendToAll(payload: OutgoingCommand) {
+    console.log(`[${this.gameCode}] Sending to all: ${JSON.stringify(payload)}`);
     this.players.forEach(({ id }) => {
       this.options.onCommunicate(id, payload);
     });
