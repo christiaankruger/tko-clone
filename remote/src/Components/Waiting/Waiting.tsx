@@ -12,7 +12,9 @@ export interface WaitingProps {
 export const Waiting: FC<WaitingProps> = (props) => {
   return (
     <div className={BEM()}>
-      <Heading>Hang tight, {props.name}.</Heading>
+      <Heading>
+        Hang tight, <div className={'name'}>{props.name}</div>.
+      </Heading>
     </div>
   );
 };

@@ -8,7 +8,7 @@ export interface CommandBody {
 }
 export interface OutgoingCommand extends CommandBody {}
 
-export type CommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score';
+export type CommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score' | 'wait';
 
 export type GameType = 'tko'; // More to follow.
 
@@ -23,4 +23,8 @@ export interface PlayerSocketIdentifierProps {
 
 export interface PlayerJoinResult {
   playerId: string;
+}
+
+export interface CommandResult {
+  command: OutgoingCommand;
 }
