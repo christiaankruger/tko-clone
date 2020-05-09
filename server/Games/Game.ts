@@ -14,4 +14,5 @@ export interface IGame {
   hasPlayerId: (id: string) => boolean;
   playerByName: (name: string) => Player | undefined;
   input: (command: IncomingCommand) => void;
+  orchestrate: () => Promise<void>;
 }

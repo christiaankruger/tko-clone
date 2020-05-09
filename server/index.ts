@@ -18,6 +18,18 @@ const router = new Router();
 export type GameSetType = { game: IGame };
 const gameMap: { [roomCode: string]: GameSetType } = {};
 
+router.post('/:code/start', (ctx, next) => {
+  const code = ctx.params.code;
+  const set = gameMap[code];
+  if (!set) {
+    ctx.status = 400;
+    ctx.body = `Invalid game code: ${code}.`;
+    return next();
+  }
+  set.game.orchestrate();
+  ctx.body = { success: true };
+});
+
 router.post('/:code/join', (ctx, next) => {
   const code = ctx.params.code;
   const name = ctx.request.body.name;
@@ -83,7 +95,7 @@ const http = app.listen(env.port, () => {
 const io = socketIo.listen(http);
 const communicator = new SocketCommunicator(io);
 
-router.post('/start', (ctx, next) => {
+router.post('/create', (ctx, next) => {
   const roomCode = generateRoomCode();
   gameMap[roomCode] = {
     game: new TKO({
@@ -92,7 +104,6 @@ router.post('/start', (ctx, next) => {
       },
     }),
   };
-
   ctx.body = { roomCode };
 });
 
