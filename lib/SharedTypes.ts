@@ -20,3 +20,7 @@ export enum SOCKET_EVENTS {
 export interface PlayerSocketIdentifierProps {
   playerId: string;
 }
+
+export interface PlayerJoinResult {
+  playerId: string;
+}

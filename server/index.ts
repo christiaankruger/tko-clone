@@ -1,10 +1,11 @@
 import Koa from 'koa';
+import cors from 'koa2-cors';
 import Router from 'koa-router';
 import socketIo from 'socket.io';
 import { applyMiddleware } from './middleware';
 import { generateRoomCode } from './util';
 import { TKO, SocketCommunicator } from './Games/TKO';
-import { CommandBody, SOCKET_EVENTS, PlayerSocketIdentifierProps } from '../lib/SharedTypes';
+import { CommandBody, SOCKET_EVENTS, PlayerSocketIdentifierProps, PlayerJoinResult } from '../lib/SharedTypes';
 import { IGame } from './Games/Game';
 
 const env = {
@@ -42,7 +43,7 @@ router.post('/:code/join', (ctx, next) => {
   }
 
   const player = set.game.addPlayer(name);
-  ctx.body = { playerId: player.id };
+  ctx.body = { playerId: player.id } as PlayerJoinResult;
 });
 
 router.post('/:code/command', (ctx, next) => {
@@ -70,6 +71,7 @@ router.post('/:code/command', (ctx, next) => {
   ctx.body = { success: true };
 });
 
+app.use(cors());
 applyMiddleware(app);
 app.use(router.routes());
 app.use(router.allowedMethods());
@@ -95,10 +97,14 @@ router.post('/start', (ctx, next) => {
 });
 
 io.on('connection', (socket) => {
-  console.log(`[Connected] ${socket.id}`);
+  console.log(`[Socket.io] '${socket.id}' has connected.`);
+  io.sockets.clients((error: any, clients: any[]) => {
+    console.log(`[Socket.io] Connection count: ${clients.length}.`);
+  });
   socket.on(SOCKET_EVENTS.PLAYER_SOCKET_IDENTIFIER, (props: PlayerSocketIdentifierProps) => {
     // We marry playerId to socketId
     const { playerId } = props;
     communicator.register(playerId, socket.id);
   });
+  socket.on('disconnect', () => console.log(`[Socket.io] '${socket.id}' disconnected.`));
 });

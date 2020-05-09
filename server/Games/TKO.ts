@@ -50,6 +50,7 @@ export class SocketCommunicator {
   constructor(private io: socketIo.Server) {}
 
   register(playerId: string, socketId: string): void {
+    console.log(`[COMMS] Register '${playerId}' as ${socketId}'.`);
     const existing = this.playerIdToSocketId[playerId];
     if (existing) {
       // TODO: Close / destroy existing socket.

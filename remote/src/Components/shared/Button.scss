@@ -1,0 +1,16 @@
+$soft-blue: #53adcb;
+
+.jcr-button {
+  width: 80px;
+  background-color: $soft-blue;
+  color: white;
+  padding: 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+
+  &:hover {
+    background-color: darken($soft-blue, 10%);
+  }
+}
