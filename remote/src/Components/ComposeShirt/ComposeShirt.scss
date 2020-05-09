@@ -1,0 +1,25 @@
+.jcr-compose-shirt {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  > * {
+    margin-bottom: 16px;
+  }
+
+  &__shirt-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  &__picker {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    width: 100%;
+  }
+}

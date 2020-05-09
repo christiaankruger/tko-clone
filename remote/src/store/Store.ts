@@ -6,6 +6,7 @@ export enum Pages {
   WAITING = 'waiting',
   DRAW = 'draw',
   WRITE = 'write',
+  COMPOSE = 'compose',
 }
 
 export interface GameDetails {
@@ -17,6 +18,7 @@ export interface GameDetails {
 export class Store {
   @observable page: Pages = Pages.LOGIN;
   @observable gameDetails?: GameDetails;
+  @observable metadata: any = {};
 
   @action
   setGameDetails = (details: GameDetails) => {
@@ -37,6 +39,8 @@ export class Store {
 
   @action
   consumeCommand(command: OutgoingCommand) {
+    this.metadata = command.metadata;
+
     if (command.type === 'design') {
       this.goToPage(Pages.DRAW);
     }
@@ -45,6 +49,9 @@ export class Store {
     }
     if (command.type === 'slogan') {
       this.goToPage(Pages.WRITE);
+    }
+    if (command.type === 'shirt') {
+      this.goToPage(Pages.COMPOSE);
     }
   }
 }

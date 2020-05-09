@@ -2,8 +2,9 @@ import { v4 } from 'uuid';
 import { IncomingCommand, OutgoingCommand, SOCKET_EVENTS, GameType } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
 import { Player, IGame } from './Game';
-import { Design, Slogan } from './TKOMechanics';
-import { generateRoomCode } from '../util';
+import { Design, Slogan, Round, Shirt } from './TKOMechanics';
+import { generateRoomCode, shuffle } from '../util';
+import { take, pipe, compose, filter } from 'ramda';
 
 export interface TKOProps {
   onCommunicate: OnCommunicateType;
@@ -17,6 +18,8 @@ export class TKO implements IGame {
   players: Player[] = [];
   designs: Design[] = [];
   slogans: Slogan[] = [];
+
+  currentRound: Round = new Round();
 
   gameType: GameType = 'tko';
 
@@ -42,7 +45,10 @@ export class TKO implements IGame {
 
   async orchestrate() {
     await this.collectDesigns();
+    await this.collectDesigns();
     await this.collectSlogans();
+    this.sendToAll({ type: 'wait', metadata: {} });
+    await this.collectShirts(this.designs, this.slogans);
     this.sendToAll({ type: 'wait', metadata: {} });
   }
 
@@ -75,6 +81,42 @@ export class TKO implements IGame {
     }
   }
 
+  private async collectShirts(designs: Design[], slogans: Slogan[]) {
+    const used: { [id: string]: boolean } = {};
+    const takeDesigns = take(designs.length / this.players.length);
+    const takeSlogans = take(slogans.length / this.players.length);
+
+    this.players.forEach(({ id }) => {
+      const designsForMe = takeDesigns(
+        shuffle(designs)
+          .filter((v) => v.createdBy !== id)
+          .filter((v) => !used[v.id])
+      );
+      const slogansForMe = takeSlogans(
+        shuffle(slogans)
+          .filter((v) => v.createdBy !== id)
+          .filter((v) => !used[v.id])
+      );
+      [...designsForMe, ...slogansForMe].forEach((v) => (used[v.id] = true));
+      this.options.onCommunicate(id, {
+        type: 'shirt',
+        metadata: {
+          designs: designsForMe,
+          slogans: slogansForMe,
+        },
+      });
+    });
+
+    const targetShirts = this.currentRound.shirts.length + this.players.length;
+    for (let i = 1; i <= 45; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // TODO: Emit timer to presenter
+      if (this.currentRound.shirts.length === targetShirts) {
+        return;
+      }
+    }
+  }
+
   input(command: IncomingCommand): OutgoingCommand {
     console.log(`[${this.gameCode}]: Received command: ${JSON.stringify(command)}`);
     if (command.type === 'design') {
@@ -98,6 +140,20 @@ export class TKO implements IGame {
       this.slogans.push(slogan);
       return {
         type: 'slogan',
+        metadata: {},
+      };
+    }
+    if (command.type === 'shirt') {
+      const { designId, sloganId } = command.metadata;
+      const shirt = new Shirt({
+        createdBy: command.sourcePlayerId,
+        design: this.designs.find((d) => d.id === designId)!,
+        slogan: this.slogans.find((s) => s.id === sloganId)!,
+      });
+      console.log(`Received shirt with design: '${designId}' and slogan '${sloganId}'.`);
+      this.currentRound.shirts.push(shirt);
+      return {
+        type: 'wait',
         metadata: {},
       };
     }

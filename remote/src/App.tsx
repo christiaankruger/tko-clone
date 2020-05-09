@@ -11,6 +11,8 @@ import { PlayerJoinResult, SOCKET_EVENTS, CommandResult, CommandType, OutgoingCo
 import { Waiting } from './Components/Waiting/Waiting';
 import { Draw } from './Components/Draw/Draw';
 import { Write } from './Components/Write/Write';
+import { ComposeShirt } from './Components/ComposeShirt/ComposeShirt';
+import { dummyShirtOptions } from './dummy';
 
 const socket = SocketIO('http://localhost:7024');
 const store = new Store();
@@ -66,6 +68,36 @@ export class App extends Component {
         <Write
           onSubmit={async (text) => {
             const result = await postCommand('slogan', { text });
+            store.consumeCommand(result.command);
+          }}
+        />
+      );
+    }
+    if (store.page === Pages.COMPOSE) {
+      // We should have metadata
+      // metadata = {designs: [], slogans: []}
+
+      const { designs, slogans } = store.metadata;
+
+      // Testing:
+      // const designs = dummyShirtOptions.map((data) => ({
+      //   id: Math.random() + '',
+      //   base64: data,
+      // }));
+      // const slogans = ['Slogan 1', 'Slogan 2'].map((s) => ({
+      //   id: Math.random() + '',
+      //   text: s,
+      // }));
+
+      return (
+        <ComposeShirt
+          designs={designs}
+          slogans={slogans}
+          onSubmit={async (designId, sloganId) => {
+            const result = await postCommand('shirt', {
+              designId,
+              sloganId,
+            });
             store.consumeCommand(result.command);
           }}
         />

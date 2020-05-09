@@ -30,7 +30,23 @@ export class Shirt {
   slogan!: Slogan;
   id: string = shortId('shirt');
 
-  constructor(props: { createdBy: string; text: string }) {
+  constructor(props: { createdBy: string; design: Design; slogan: Slogan }) {
     Object.assign(this, props);
   }
+}
+
+export class Score {
+  id: string = shortId('score');
+  scorerId!: string;
+  shirt!: Shirt;
+  value!: number;
+
+  constructor(props: { scorerId: string; shirt: Shirt; value: number }) {
+    Object.assign(this, props);
+  }
+}
+
+export class Round {
+  shirts: Shirt[] = [];
+  scores: Score[] = [];
 }
