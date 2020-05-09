@@ -9,6 +9,7 @@ export interface Player {
 }
 
 export interface IGame {
+  gameCode: string;
   gameType: GameType;
   addPlayer: (name: string) => Player;
   hasPlayerId: (id: string) => boolean;

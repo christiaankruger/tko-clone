@@ -14,7 +14,7 @@ export interface GameDetails {
 }
 
 export class Store {
-  @observable page: Pages = Pages.DRAW;
+  @observable page: Pages = Pages.LOGIN;
   @observable gameDetails?: GameDetails;
 
   @action
@@ -31,7 +31,7 @@ export class Store {
     if (!this.gameDetails) {
       throw new Error('Game details not initialized');
     }
-    return `${this.gameDetails.gameCode}/command`;
+    return `/${this.gameDetails.gameCode}/command`;
   }
 
   @action

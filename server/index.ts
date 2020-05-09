@@ -76,11 +76,11 @@ router.post('/:code/command', (ctx, next) => {
     return next();
   }
 
-  set.game.input({
+  const resultingCommand = set.game.input({
     ...command,
     sourcePlayerId: playerId,
   });
-  ctx.body = { success: true };
+  ctx.body = { command: resultingCommand };
 });
 
 app.use(cors());
@@ -96,15 +96,14 @@ const io = socketIo.listen(http);
 const communicator = new SocketCommunicator(io);
 
 router.post('/create', (ctx, next) => {
-  const roomCode = generateRoomCode();
-  gameMap[roomCode] = {
-    game: new TKO({
-      onCommunicate: (playerId, command) => {
-        communicator.send(playerId, command);
-      },
-    }),
-  };
-  ctx.body = { roomCode };
+  const game = new TKO({
+    onCommunicate: (playerId, command) => {
+      communicator.send(playerId, command);
+    },
+  });
+
+  gameMap[game.gameCode] = { game };
+  ctx.body = { roomCode: game.gameCode };
 });
 
 io.on('connection', (socket) => {
