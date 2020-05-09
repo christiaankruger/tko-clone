@@ -114,6 +114,7 @@ export class TKO implements IGame {
 
 export class SocketCommunicator {
   playerIdToSocketId: { [key: string]: string } = {};
+  lastCommandSent: { [playerId: string]: OutgoingCommand } = {};
 
   constructor(private io: socketIo.Server) {}
 
@@ -124,10 +125,25 @@ export class SocketCommunicator {
       // TODO: Close / destroy existing socket.
     }
     this.playerIdToSocketId[playerId] = socketId;
+    // Catchup a player in case the game is already ongoing and they reconnected
+    this.catchup(playerId);
   }
 
   send(playerId: string, payload: OutgoingCommand) {
+    this.lastCommandSent[playerId] = payload;
     const socketId = this.playerIdToSocketId[playerId];
+    if (!socketId) {
+      console.log(`[COMMS] WARNING! No socket found for player: '${playerId}'.`);
+      return;
+    }
     this.io.to(socketId).emit(SOCKET_EVENTS.COMMAND, payload);
+  }
+
+  catchup(playerId: string) {
+    // Resend the last command we sent to player
+    const command = this.lastCommandSent[playerId];
+    if (command) {
+      this.send(playerId, command);
+    }
   }
 }
