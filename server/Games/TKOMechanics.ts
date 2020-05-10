@@ -35,8 +35,8 @@ export class Shirt {
   }
 }
 
-export class Score {
-  id: string = shortId('score');
+export class ShirtScore {
+  id: string = shortId('shirt-score');
   scorerId!: string;
   shirt!: Shirt;
   value!: number;
@@ -46,7 +46,20 @@ export class Score {
   }
 }
 
+// For slogans and designs
+export class AdhocScore {
+  id: string = shortId('adhoc-score');
+  scorerId!: string;
+  targetId!: string;
+  value!: number;
+
+  constructor(props: { scorerId: string; targetId: string; value: number }) {
+    Object.assign(this, props);
+  }
+}
+
 export class Round {
   shirts: Shirt[] = [];
-  scores: Score[] = [];
+  shirtScores: ShirtScore[] = [];
+  adhocScores: AdhocScore[] = [];
 }

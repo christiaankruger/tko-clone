@@ -13,6 +13,7 @@ import { Draw } from './Components/Draw/Draw';
 import { Write } from './Components/Write/Write';
 import { ComposeShirt } from './Components/ComposeShirt/ComposeShirt';
 import { dummyShirtOptions } from './dummy';
+import { Score } from './Components/Score/Score';
 
 const socket = SocketIO('http://localhost:7024');
 const store = new Store();
@@ -97,6 +98,24 @@ export class App extends Component {
             const result = await postCommand('shirt', {
               designId,
               sloganId,
+            });
+            store.consumeCommand(result.command);
+          }}
+        />
+      );
+    }
+
+    if (store.page === Pages.SCORE) {
+      const { shirtId, possibleScores, description } = store.metadata;
+
+      return (
+        <Score
+          description={description}
+          possibleScores={possibleScores}
+          onScore={async (value) => {
+            const result = await postCommand('score', {
+              shirtId,
+              value,
             });
             store.consumeCommand(result.command);
           }}

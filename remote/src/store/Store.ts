@@ -7,6 +7,7 @@ export enum Pages {
   DRAW = 'draw',
   WRITE = 'write',
   COMPOSE = 'compose',
+  SCORE = 'score',
 }
 
 export interface GameDetails {
@@ -52,6 +53,9 @@ export class Store {
     }
     if (command.type === 'shirt') {
       this.goToPage(Pages.COMPOSE);
+    }
+    if (command.type === 'score') {
+      this.goToPage(Pages.SCORE);
     }
   }
 }

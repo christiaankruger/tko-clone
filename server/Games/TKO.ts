@@ -2,7 +2,7 @@ import { v4 } from 'uuid';
 import { IncomingCommand, OutgoingCommand, SOCKET_EVENTS, GameType } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
 import { Player, IGame } from './Game';
-import { Design, Slogan, Round, Shirt } from './TKOMechanics';
+import { Design, Slogan, Round, Shirt, ShirtScore, AdhocScore, shortId } from './TKOMechanics';
 import { generateRoomCode, shuffle } from '../util';
 import { take, pipe, compose, filter } from 'ramda';
 
@@ -27,7 +27,7 @@ export class TKO implements IGame {
 
   addPlayer(name: string): Player {
     const player: Player = {
-      id: v4(),
+      id: shortId(`player-${this.gameCode}-${name}`),
       name,
     };
 
@@ -45,11 +45,38 @@ export class TKO implements IGame {
 
   async orchestrate() {
     await this.collectDesigns();
-    await this.collectDesigns();
     await this.collectSlogans();
     this.sendToAll({ type: 'wait', metadata: {} });
     await this.collectShirts(this.designs, this.slogans);
     this.sendToAll({ type: 'wait', metadata: {} });
+    for (let i = 0; i < this.currentRound.shirts.length; i++) {
+      await this.collectScoresFor(this.currentRound.shirts[i], [100, 200, 300, 400, 500]);
+    }
+  }
+
+  private async collectScoresFor(shirt: Shirt, possibleScores: number[]) {
+    this.players
+      .filter((p) => p.id !== shirt.createdBy)
+      .forEach((p) => {
+        this.options.onCommunicate(p.id, {
+          type: 'score',
+          metadata: {
+            description: shirt.slogan.text,
+            shirtId: shirt.id,
+            possibleScores,
+          },
+        });
+      });
+
+    // Everyone except the artist gets to score
+    const targetScoreCount = this.currentRound.shirtScores.length + (this.players.length - 1);
+
+    for (let i = 1; i <= 45; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (this.currentRound.shirtScores.length === targetScoreCount) {
+        return;
+      }
+    }
   }
 
   private async collectDesigns() {
@@ -98,6 +125,10 @@ export class TKO implements IGame {
           .filter((v) => !used[v.id])
       );
       [...designsForMe, ...slogansForMe].forEach((v) => (used[v.id] = true));
+      console.log(`[collectShirts] Sending to player '${id}'...`);
+      console.log(`... designs: ${designsForMe.map((d) => d.id)}`);
+      console.log(`... slogans: ${slogansForMe.map((d) => d.id)}`);
+
       this.options.onCommunicate(id, {
         type: 'shirt',
         metadata: {
@@ -157,6 +188,41 @@ export class TKO implements IGame {
         metadata: {},
       };
     }
+    if (command.type === 'score') {
+      const { shirtId, value } = command.metadata;
+      const shirt = this.currentRound.shirts.find((s) => s.id === shirtId)!;
+      // Register shirt score
+      const shirtScore = new ShirtScore({
+        scorerId: command.sourcePlayerId,
+        shirt,
+        value,
+      });
+      // Register adhoc score
+      const designScore = new AdhocScore({
+        scorerId: command.sourcePlayerId,
+        targetId: shirt.design.createdBy,
+        value: value / 2,
+      });
+      const sloganScore = new AdhocScore({
+        scorerId: command.sourcePlayerId,
+        targetId: shirt.slogan.createdBy,
+        value: value / 2,
+      });
+
+      console.log(`Registered a shirt score of '${shirtScore.value}' for '${shirtScore.shirt.createdBy}.`);
+      console.log(`Registered a design score of '${designScore.value}' for '${designScore.targetId}.`);
+      console.log(`Registered a slogan score of '${sloganScore.value}' for '${sloganScore.targetId}.`);
+
+      this.currentRound.shirtScores.push(shirtScore);
+      this.currentRound.adhocScores.push(designScore);
+      this.currentRound.adhocScores.push(sloganScore);
+
+      return {
+        type: 'wait',
+        metadata: {},
+      };
+    }
+
     throw new Error('Girl, what?');
   }
 
