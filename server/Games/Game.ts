@@ -8,10 +8,17 @@ export interface Player {
   name: string;
 }
 
+export interface Presenter {
+  id: string;
+
+  isCreator: boolean;
+}
+
 export interface IGame {
   gameCode: string;
   gameType: GameType;
   addPlayer: (name: string) => Player;
+  addPresenter: (isCreator?: boolean) => Presenter;
   hasPlayerId: (id: string) => boolean;
   playerByName: (name: string) => Player | undefined;
   input: (command: IncomingCommand) => void;

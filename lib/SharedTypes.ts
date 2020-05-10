@@ -1,30 +1,39 @@
+import { Player } from '../server/Games/Game';
+
 export interface IncomingCommand extends CommandBody {
   sourcePlayerId: string;
+  type: PlayerCommandType;
 }
 
 export interface CommandBody {
-  type: CommandType;
   metadata: any;
 }
-export interface OutgoingCommand extends CommandBody {}
+export interface OutgoingPlayerCommand extends CommandBody {
+  type: PlayerCommandType;
+}
 
-export type CommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score' | 'wait';
+export interface OutgoingPresenterCommand extends CommandBody {
+  type: PresenterCommandType;
+}
+
+export type PlayerCommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score' | 'wait';
+export type PresenterCommandType = 'joined' | 'timer';
 
 export type GameType = 'tko'; // More to follow.
 
 export enum SOCKET_EVENTS {
   COMMAND = 'command',
-  PLAYER_SOCKET_IDENTIFIER = 'player-socket-identifier',
+  CLIENT_SOCKET_IDENTIFIER = 'client-socket-identifier',
 }
 
-export interface PlayerSocketIdentifierProps {
-  playerId: string;
+export interface ClientSocketIdentifierProps {
+  id: string;
 }
 
 export interface PlayerJoinResult {
-  playerId: string;
+  player: Player;
 }
 
 export interface CommandResult {
-  command: OutgoingCommand;
+  command: OutgoingPlayerCommand;
 }

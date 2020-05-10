@@ -5,7 +5,13 @@ import socketIo from 'socket.io';
 import { applyMiddleware } from './middleware';
 import { generateRoomCode } from './util';
 import { TKO, SocketCommunicator } from './Games/TKO';
-import { CommandBody, SOCKET_EVENTS, PlayerSocketIdentifierProps, PlayerJoinResult } from '../lib/SharedTypes';
+import {
+  CommandBody,
+  SOCKET_EVENTS,
+  ClientSocketIdentifierProps,
+  PlayerJoinResult,
+  PlayerCommandType,
+} from '../lib/SharedTypes';
 import { IGame } from './Games/Game';
 
 const env = {
@@ -55,13 +61,27 @@ router.post('/:code/join', (ctx, next) => {
   }
 
   const player = set.game.addPlayer(name);
-  ctx.body = { playerId: player.id } as PlayerJoinResult;
+  ctx.body = { player } as PlayerJoinResult;
+});
+
+router.post('/:code/watch', (ctx, next) => {
+  const code = ctx.params.code;
+  const set = gameMap[code];
+  if (!set) {
+    ctx.status = 400;
+    ctx.body = `Invalid game code: ${code}.`;
+    return next();
+  }
+
+  const presenter = set.game.addPresenter();
+  ctx.body = { presenter };
 });
 
 router.post('/:code/command', (ctx, next) => {
   const code = ctx.params.code;
   const playerId = ctx.request.body.playerId;
-  const command = ctx.request.body.command as CommandBody;
+  // TODO: Clean up types here
+  const command = ctx.request.body.command as CommandBody & { type: PlayerCommandType };
 
   const set = gameMap[code];
   if (!set) {
@@ -101,9 +121,10 @@ router.post('/create', (ctx, next) => {
       communicator.send(playerId, command);
     },
   });
-
   gameMap[game.gameCode] = { game };
-  ctx.body = { roomCode: game.gameCode };
+
+  const presenter = game.addPresenter(true);
+  ctx.body = { roomCode: game.gameCode, presenter };
 });
 
 io.on('connection', (socket) => {
@@ -111,10 +132,10 @@ io.on('connection', (socket) => {
   io.sockets.clients((error: any, clients: any[]) => {
     console.log(`[Socket.io] Connection count: ${clients.length}.`);
   });
-  socket.on(SOCKET_EVENTS.PLAYER_SOCKET_IDENTIFIER, (props: PlayerSocketIdentifierProps) => {
-    // We marry playerId to socketId
-    const { playerId } = props;
-    communicator.register(playerId, socket.id);
+  socket.on(SOCKET_EVENTS.CLIENT_SOCKET_IDENTIFIER, (props: ClientSocketIdentifierProps) => {
+    // We marry id (playerId or presenterId) to socketId
+    const { id } = props;
+    communicator.register(id, socket.id);
   });
   socket.on('disconnect', () => console.log(`[Socket.io] '${socket.id}' disconnected.`));
 });

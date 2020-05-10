@@ -1,7 +1,7 @@
 import { v4 } from 'uuid';
-import { IncomingCommand, OutgoingCommand, SOCKET_EVENTS, GameType } from '../../lib/SharedTypes';
+import { IncomingCommand, OutgoingPlayerCommand, SOCKET_EVENTS, GameType } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
-import { Player, IGame } from './Game';
+import { Player, IGame, Presenter } from './Game';
 import { Design, Slogan, Round, Shirt, ShirtScore, AdhocScore, shortId, Vote } from './TKOMechanics';
 import { generateRoomCode, shuffle } from '../util';
 import { take, pipe, compose, filter, last } from 'ramda';
@@ -10,12 +10,13 @@ export interface TKOProps {
   onCommunicate: OnCommunicateType;
 }
 
-export type OnCommunicateType = (playerId: string, payload: OutgoingCommand) => void;
+export type OnCommunicateType = (playerId: string, payload: OutgoingPlayerCommand) => void;
 
 export class TKO implements IGame {
   gameCode: string = generateRoomCode();
 
   players: Player[] = [];
+  presenters: Presenter[] = [];
   designs: Design[] = [];
   slogans: Slogan[] = [];
 
@@ -32,7 +33,17 @@ export class TKO implements IGame {
     };
 
     this.players.push(player);
+    // TODO: Send all players to presenters
     return player;
+  }
+
+  addPresenter(isCreator: boolean = false): Presenter {
+    const presenter: Presenter = {
+      id: shortId(`presenter-${this.gameCode}`),
+      isCreator,
+    };
+    this.presenters.push(presenter);
+    return presenter;
   }
 
   hasPlayerId(playerId: string): boolean {
@@ -47,14 +58,15 @@ export class TKO implements IGame {
     // Round 1
     await this.collectDesigns();
     await this.collectSlogans();
-    this.sendToAll({ type: 'wait', metadata: {} });
     await this.collectShirts(this.designs, this.slogans);
-    this.sendToAll({ type: 'wait', metadata: {} });
+
     for (let i = 0; i < this.currentRound.shirts.length; i++) {
+      this.sendToAllPlayers({ type: 'wait', metadata: {} });
       await this.collectScoresFor(this.currentRound.shirts[i], [100, 200, 300, 400, 500]);
     }
     const allScores = this.currentRound.shirts.map((shirt) => {
       const score = this.currentRound.shirtScores
+        .filter((s) => s.shirt.id === shirt.id)
         .map((shirtScore) => shirtScore.value)
         .reduce((memo, x) => memo + x, 0);
       return { shirt, score };
@@ -66,8 +78,11 @@ export class TKO implements IGame {
         topTwo.map((t) => ({ shirtId: t.shirt.id, score: t.score }))
       )}`
     );
+
+    this.sendToAllPlayers({ type: 'wait', metadata: {} });
     await this.collectVotesBetween(topTwo.map((t) => t.shirt));
-    // TODO: Tally up votes
+    // TODO: Tally up votes, convert to scores
+    // TODO: Tally up scores (remember adhoc scores)
   }
 
   private async collectVotesBetween(shirts: Shirt[]) {
@@ -97,21 +112,21 @@ export class TKO implements IGame {
   }
 
   private async collectScoresFor(shirt: Shirt, possibleScores: number[]) {
-    this.players
-      .filter((p) => p.id !== shirt.createdBy)
-      .forEach((p) => {
-        this.options.onCommunicate(p.id, {
-          type: 'score',
-          metadata: {
-            description: shirt.slogan.text,
-            shirtId: shirt.id,
-            possibleScores,
-          },
-        });
+    const scoringPlayers = this.players.filter((p) => p.id !== shirt.createdBy);
+
+    scoringPlayers.forEach((p) => {
+      this.options.onCommunicate(p.id, {
+        type: 'score',
+        metadata: {
+          description: shirt.slogan.text,
+          shirtId: shirt.id,
+          possibleScores,
+        },
       });
+    });
 
     // Everyone except the artist gets to score
-    const targetScoreCount = this.currentRound.shirtScores.length + (this.players.length - 1);
+    const targetScoreCount = this.currentRound.shirtScores.length + scoringPlayers.length;
 
     for (let i = 1; i <= 45; i++) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -123,7 +138,7 @@ export class TKO implements IGame {
 
   private async collectDesigns() {
     const targetDesignCount = this.designs.length + this.players.length;
-    this.sendToAll({
+    this.sendToAllPlayers({
       type: 'design',
       metadata: {},
     });
@@ -137,7 +152,7 @@ export class TKO implements IGame {
   }
 
   private async collectSlogans(targetSloganCount: number = Infinity) {
-    this.sendToAll({
+    this.sendToAllPlayers({
       type: 'slogan',
       metadata: {},
     });
@@ -190,7 +205,7 @@ export class TKO implements IGame {
     }
   }
 
-  input(command: IncomingCommand): OutgoingCommand {
+  input(command: IncomingCommand): OutgoingPlayerCommand {
     console.log(`[${this.gameCode}]: Received command: ${JSON.stringify(command)}`);
     if (command.type === 'design') {
       const design = new Design({
@@ -280,46 +295,54 @@ export class TKO implements IGame {
     throw new Error('Girl, what?');
   }
 
-  private sendToAll(payload: OutgoingCommand) {
-    console.log(`[${this.gameCode}] Sending to all: ${JSON.stringify(payload)}`);
+  private sendToAllPlayers(payload: OutgoingPlayerCommand) {
+    console.log(`[${this.gameCode}] Sending to all players: ${JSON.stringify(payload)}`);
     this.players.forEach(({ id }) => {
+      this.options.onCommunicate(id, payload);
+    });
+  }
+
+  private sendToAllPresenters(payload: OutgoingPlayerCommand) {
+    console.log(`[${this.gameCode}] Sending to all presenters: ${JSON.stringify(payload)}`);
+    this.presenters.forEach(({ id }) => {
       this.options.onCommunicate(id, payload);
     });
   }
 }
 
 export class SocketCommunicator {
-  playerIdToSocketId: { [key: string]: string } = {};
-  lastCommandSent: { [playerId: string]: OutgoingCommand } = {};
+  clientIdToSocketId: { [key: string]: string } = {};
+  lastCommandSent: { [playerId: string]: OutgoingPlayerCommand } = {};
 
   constructor(private io: socketIo.Server) {}
 
-  register(playerId: string, socketId: string): void {
-    console.log(`[COMMS] Register '${playerId}' as ${socketId}'.`);
-    const existing = this.playerIdToSocketId[playerId];
+  register(clientId: string, socketId: string): void {
+    console.log(`[COMMS] Register '${clientId}' as ${socketId}'.`);
+    const existing = this.clientIdToSocketId[clientId];
     if (existing) {
       // TODO: Close / destroy existing socket.
     }
-    this.playerIdToSocketId[playerId] = socketId;
+    this.clientIdToSocketId[clientId] = socketId;
     // Catchup a player in case the game is already ongoing and they reconnected
-    this.catchup(playerId);
+    this.catchup(clientId);
   }
 
-  send(playerId: string, payload: OutgoingCommand) {
-    this.lastCommandSent[playerId] = payload;
-    const socketId = this.playerIdToSocketId[playerId];
+  send(clientId: string, payload: OutgoingPlayerCommand) {
+    this.lastCommandSent[clientId] = payload;
+    const socketId = this.clientIdToSocketId[clientId];
     if (!socketId) {
-      console.log(`[COMMS] WARNING! No socket found for player: '${playerId}'.`);
+      console.log(`[COMMS] WARNING! No socket found for client: '${clientId}'.`);
       return;
     }
     this.io.to(socketId).emit(SOCKET_EVENTS.COMMAND, payload);
   }
 
-  catchup(playerId: string) {
+  catchup(clientId: string) {
     // Resend the last command we sent to player
-    const command = this.lastCommandSent[playerId];
+    // NB: Presenter's catchup should send all previous commands, or a subset. Since e.g. 'timer' updates won't be enough on their own.
+    const command = this.lastCommandSent[clientId];
     if (command) {
-      this.send(playerId, command);
+      this.send(clientId, command);
     }
   }
 }
