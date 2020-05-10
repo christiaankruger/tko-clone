@@ -8,7 +8,9 @@ export interface CommandBody {
 }
 export interface OutgoingCommand extends CommandBody {}
 
-export type CommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score';
+export type CommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score' | 'wait';
+
+export type GameType = 'tko'; // More to follow.
 
 export enum SOCKET_EVENTS {
   COMMAND = 'command',
@@ -17,4 +19,12 @@ export enum SOCKET_EVENTS {
 
 export interface PlayerSocketIdentifierProps {
   playerId: string;
+}
+
+export interface PlayerJoinResult {
+  playerId: string;
+}
+
+export interface CommandResult {
+  command: OutgoingCommand;
 }

@@ -1,0 +1,10 @@
+.jcr-waiting {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  &__name {
+    color: #4169e1;
+  }
+}

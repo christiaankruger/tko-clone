@@ -3,27 +3,49 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
+  "browserslist": [
+    "last 1 Chrome versions"
+  ],
   "scripts": {
     "start": "ts-node server/index.ts"
   },
   "dependencies": {
     "@types/socket.io": "^2.1.4",
     "@types/socket.io-client": "^1.4.32",
+    "axios": "^0.19.2",
     "koa": "^2.11.0",
     "koa-bodyparser": "^4.3.0",
     "koa-compose": "^4.1.0",
     "koa-router": "^8.0.8",
     "koa-send": "^5.0.0",
+    "koa2-cors": "^2.0.6",
+    "mobx": "^5.15.4",
+    "mobx-react": "^6.2.2",
+    "ramda": "^0.27.0",
+    "react": "^16.13.1",
+    "react-bem-helper": "^1.4.1",
+    "react-canvas-draw": "^1.1.1",
+    "react-dom": "^16.13.1",
+    "react-icons": "^3.10.0",
     "socket.io": "^2.3.0",
     "socket.io-client": "^2.3.0",
     "uuid": "^8.0.0"
   },
   "devDependencies": {
+    "@types/axios": "^0.14.0",
     "@types/koa": "^2.11.3",
     "@types/koa-bodyparser": "^4.3.0",
     "@types/koa-router": "^7.4.0",
     "@types/koa-send": "^4.1.2",
+    "@types/koa2-cors": "^2.0.1",
+    "@types/ramda": "^0.27.4",
+    "@types/react": "^16.9.34",
+    "@types/react-canvas-draw": "^1.1.0",
+    "@types/react-dom": "^16.9.7",
+    "@types/react-icons": "^3.0.0",
     "@types/uuid": "^7.0.3",
+    "parcel-bundler": "^1.12.4",
+    "sass": "^1.26.5",
     "ts-node": "^8.10.1",
     "typescript": "^3.8.3"
   }
