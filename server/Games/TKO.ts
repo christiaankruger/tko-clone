@@ -2,9 +2,9 @@ import { v4 } from 'uuid';
 import { IncomingCommand, OutgoingCommand, SOCKET_EVENTS, GameType } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
 import { Player, IGame } from './Game';
-import { Design, Slogan, Round, Shirt, ShirtScore, AdhocScore, shortId } from './TKOMechanics';
+import { Design, Slogan, Round, Shirt, ShirtScore, AdhocScore, shortId, Vote } from './TKOMechanics';
 import { generateRoomCode, shuffle } from '../util';
-import { take, pipe, compose, filter } from 'ramda';
+import { take, pipe, compose, filter, last } from 'ramda';
 
 export interface TKOProps {
   onCommunicate: OnCommunicateType;
@@ -44,6 +44,7 @@ export class TKO implements IGame {
   }
 
   async orchestrate() {
+    // Round 1
     await this.collectDesigns();
     await this.collectSlogans();
     this.sendToAll({ type: 'wait', metadata: {} });
@@ -51,6 +52,47 @@ export class TKO implements IGame {
     this.sendToAll({ type: 'wait', metadata: {} });
     for (let i = 0; i < this.currentRound.shirts.length; i++) {
       await this.collectScoresFor(this.currentRound.shirts[i], [100, 200, 300, 400, 500]);
+    }
+    const allScores = this.currentRound.shirts.map((shirt) => {
+      const score = this.currentRound.shirtScores
+        .map((shirtScore) => shirtScore.value)
+        .reduce((memo, x) => memo + x, 0);
+      return { shirt, score };
+    });
+    // TODO: Broadcast scores to presenter
+    const topTwo = take(2)(allScores.sort((a, b) => b.score - a.score));
+    console.log(
+      `[${this.gameCode}]: Voting happens between: ${JSON.stringify(
+        topTwo.map((t) => ({ shirtId: t.shirt.id, score: t.score }))
+      )}`
+    );
+    await this.collectVotesBetween(topTwo.map((t) => t.shirt));
+    // TODO: Tally up votes
+  }
+
+  private async collectVotesBetween(shirts: Shirt[]) {
+    this.currentRound.votingRounds.push([]);
+
+    // Everyone whose shirt is up for voting doesn't get to vote.
+    const playerIdsOfShirts = shirts.map((s) => s.createdBy);
+    const votingPlayers = this.players.filter(({ id }) => !playerIdsOfShirts.includes(id));
+
+    // 0 since we initialized to an empty array up ^
+    const targetVotes = 0 + votingPlayers.length;
+    votingPlayers.forEach(({ id }) => {
+      this.options.onCommunicate(id, {
+        type: 'vote',
+        metadata: {
+          between: shirts.map((s) => ({ description: s.slogan.text, id: s.id })),
+        },
+      });
+    });
+
+    for (let i = 1; i <= 45; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (last(this.currentRound.votingRounds)!.length === targetVotes) {
+        return;
+      }
     }
   }
 
@@ -217,6 +259,18 @@ export class TKO implements IGame {
       this.currentRound.adhocScores.push(designScore);
       this.currentRound.adhocScores.push(sloganScore);
 
+      return {
+        type: 'wait',
+        metadata: {},
+      };
+    }
+    if (command.type === 'vote') {
+      const { targetId } = command.metadata;
+      const vote = new Vote({
+        scorerId: command.sourcePlayerId,
+        voteFor: this.currentRound.shirts.find((s) => s.id === targetId)!,
+      });
+      console.log(`Player '${vote.scorerId}' voted for '${vote.voteFor.id}'.`);
       return {
         type: 'wait',
         metadata: {},

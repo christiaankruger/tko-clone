@@ -14,6 +14,7 @@ import { Write } from './Components/Write/Write';
 import { ComposeShirt } from './Components/ComposeShirt/ComposeShirt';
 import { dummyShirtOptions } from './dummy';
 import { Score } from './Components/Score/Score';
+import { Vote } from './Components/Vote/Vote';
 
 const socket = SocketIO('http://localhost:7024');
 const store = new Store();
@@ -117,6 +118,20 @@ export class App extends Component {
               shirtId,
               value,
             });
+            store.consumeCommand(result.command);
+          }}
+        />
+      );
+    }
+
+    if (store.page === Pages.VOTE) {
+      const { between } = store.metadata;
+
+      return (
+        <Vote
+          between={between}
+          onVote={async (targetId) => {
+            const result = await postCommand('vote', { targetId });
             store.consumeCommand(result.command);
           }}
         />

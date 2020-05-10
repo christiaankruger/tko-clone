@@ -8,6 +8,7 @@ export enum Pages {
   WRITE = 'write',
   COMPOSE = 'compose',
   SCORE = 'score',
+  VOTE = 'vote',
 }
 
 export interface GameDetails {
@@ -56,6 +57,9 @@ export class Store {
     }
     if (command.type === 'score') {
       this.goToPage(Pages.SCORE);
+    }
+    if (command.type === 'vote') {
+      this.goToPage(Pages.VOTE);
     }
   }
 }

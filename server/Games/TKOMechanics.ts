@@ -58,8 +58,19 @@ export class AdhocScore {
   }
 }
 
+export class Vote {
+  id: string = shortId('vote');
+  scorerId!: string;
+  voteFor!: Shirt;
+
+  constructor(props: { scorerId: string; voteFor: Shirt }) {
+    Object.assign(this, props);
+  }
+}
+
 export class Round {
   shirts: Shirt[] = [];
   shirtScores: ShirtScore[] = [];
   adhocScores: AdhocScore[] = [];
+  votingRounds: Vote[][] = [];
 }
