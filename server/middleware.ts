@@ -4,7 +4,7 @@ import send from 'koa-send';
 import path from 'path';
 import bodyParser from 'koa-bodyparser';
 
-type MiddlewareType = compose.Middleware<Koa.ParameterizedContext<Koa.DefaultState, Koa.DefaultContext>>;
+export type MiddlewareType = compose.Middleware<Koa.ParameterizedContext<Koa.DefaultState, Koa.DefaultContext>>;
 
 export const applyMiddleware = (app: Koa<any, any>): void => {
   for (let middleware of OrderedMiddleware) {

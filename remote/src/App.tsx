@@ -6,7 +6,6 @@ import SocketIO from 'socket.io-client';
 import './App.scss';
 import { Login } from './Components/Login/Login';
 import { Store, Pages } from './store/Store';
-import { Post } from './store/API';
 import {
   PlayerJoinResult,
   SOCKET_EVENTS,
@@ -21,6 +20,7 @@ import { ComposeShirt } from './Components/ComposeShirt/ComposeShirt';
 import { dummyShirtOptions } from './dummy';
 import { Score } from './Components/Score/Score';
 import { Vote } from './Components/Vote/Vote';
+import { Post } from '../../frontend-shared/util/API';
 
 const socket = SocketIO('http://localhost:7024');
 const store = new Store();

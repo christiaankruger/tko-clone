@@ -1,4 +1,4 @@
-import { Player } from '../server/Games/Game';
+import { Player, Presenter } from '../server/Games/Game';
 
 export interface IncomingCommand extends CommandBody {
   sourcePlayerId: string;
@@ -17,7 +17,7 @@ export interface OutgoingPresenterCommand extends CommandBody {
 }
 
 export type PlayerCommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score' | 'wait';
-export type PresenterCommandType = 'joined' | 'timer';
+export type PresenterCommandType = 'all-players' | 'timer';
 
 export type GameType = 'tko'; // More to follow.
 
@@ -36,4 +36,13 @@ export interface PlayerJoinResult {
 
 export interface CommandResult {
   command: OutgoingPlayerCommand;
+}
+
+export interface GameCreateResult {
+  roomCode: string;
+  presenter: Presenter;
+}
+
+export interface GameWatchResult {
+  presenter: Presenter;
 }

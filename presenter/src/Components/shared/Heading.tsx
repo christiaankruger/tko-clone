@@ -3,10 +3,10 @@ import React, { FC } from 'react';
 export const Heading: FC = (props) => {
   return (
     <div
+      className={'jcp-heading'}
       style={{
-        fontSize: '20px',
+        fontSize: '24px',
         fontFamily: "'Montserrat', serif",
-        textTransform: 'uppercase',
       }}
     >
       {props.children}

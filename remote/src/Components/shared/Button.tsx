@@ -1,9 +1,7 @@
 import React, { FC } from 'react';
-import { createBemHelper } from '../../util/BEM';
+import MButton from '@material-ui/core/Button';
 
 import './Button.scss';
-
-const BEM = createBemHelper('button');
 
 export interface ButtonProps {
   onClick: () => void;
@@ -11,13 +9,10 @@ export interface ButtonProps {
 
 export const Button: FC<ButtonProps> = (props) => {
   const { children, onClick } = props;
+
   return (
-    <div className={BEM()} onClick={onClick}>
+    <MButton variant="contained" color={'primary'} onClick={onClick}>
       {children}
-    </div>
+    </MButton>
   );
 };
-
-/*
-  <Button>Click me!</Button>
-*/

@@ -1,5 +1,11 @@
 import { v4 } from 'uuid';
-import { IncomingCommand, OutgoingPlayerCommand, SOCKET_EVENTS, GameType } from '../../lib/SharedTypes';
+import {
+  IncomingCommand,
+  OutgoingPlayerCommand,
+  SOCKET_EVENTS,
+  GameType,
+  OutgoingPresenterCommand,
+} from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
 import { Player, IGame, Presenter } from './Game';
 import { Design, Slogan, Round, Shirt, ShirtScore, AdhocScore, shortId, Vote } from './TKOMechanics';
@@ -10,7 +16,7 @@ export interface TKOProps {
   onCommunicate: OnCommunicateType;
 }
 
-export type OnCommunicateType = (playerId: string, payload: OutgoingPlayerCommand) => void;
+export type OnCommunicateType = (playerId: string, payload: OutgoingPlayerCommand | OutgoingPresenterCommand) => void;
 
 export class TKO implements IGame {
   gameCode: string = generateRoomCode();
@@ -27,21 +33,28 @@ export class TKO implements IGame {
   constructor(private options: TKOProps) {}
 
   addPlayer(name: string): Player {
-    const player: Player = {
-      id: shortId(`player-${this.gameCode}-${name}`),
+    const player = new Player({
+      id: Player.generateId(this.gameCode, name),
       name,
-    };
+    });
 
     this.players.push(player);
-    // TODO: Send all players to presenters
+
+    this.sendToAllPresenters({
+      type: 'all-players',
+      metadata: {
+        players: this.players,
+      },
+    });
+
     return player;
   }
 
   addPresenter(isCreator: boolean = false): Presenter {
-    const presenter: Presenter = {
-      id: shortId(`presenter-${this.gameCode}`),
+    const presenter = new Presenter({
+      id: Presenter.generateId(this.gameCode),
       isCreator,
-    };
+    });
     this.presenters.push(presenter);
     return presenter;
   }
@@ -302,7 +315,7 @@ export class TKO implements IGame {
     });
   }
 
-  private sendToAllPresenters(payload: OutgoingPlayerCommand) {
+  private sendToAllPresenters(payload: OutgoingPresenterCommand) {
     console.log(`[${this.gameCode}] Sending to all presenters: ${JSON.stringify(payload)}`);
     this.presenters.forEach(({ id }) => {
       this.options.onCommunicate(id, payload);
@@ -312,7 +325,9 @@ export class TKO implements IGame {
 
 export class SocketCommunicator {
   clientIdToSocketId: { [key: string]: string } = {};
-  lastCommandSent: { [playerId: string]: OutgoingPlayerCommand } = {};
+
+  playerLastCommandSent: { [playerId: string]: OutgoingPlayerCommand | OutgoingPresenterCommand } = {};
+  gamePresenterLastCommandSentPerType: { [gameCode: string]: { [key: string]: OutgoingPresenterCommand } } = {};
 
   constructor(private io: socketIo.Server) {}
 
@@ -323,12 +338,25 @@ export class SocketCommunicator {
       // TODO: Close / destroy existing socket.
     }
     this.clientIdToSocketId[clientId] = socketId;
-    // Catchup a player in case the game is already ongoing and they reconnected
-    this.catchup(clientId);
+    // Catchup a player / presenter in case the game is already ongoing and they reconnected
+    if (Player.isPlayerId(clientId)) {
+      this.playerCatchup(clientId);
+    } else if (Presenter.isPresenterId(clientId)) {
+      this.presenterCatchup(clientId);
+    }
   }
 
-  send(clientId: string, payload: OutgoingPlayerCommand) {
-    this.lastCommandSent[clientId] = payload;
+  send(clientId: string, payload: OutgoingPlayerCommand | OutgoingPresenterCommand) {
+    if (Player.isPlayerId(clientId)) {
+      this.playerLastCommandSent[clientId] = payload;
+    } else if (Presenter.isPresenterId(clientId)) {
+      const gameCode = Presenter.gameCodeFromId(clientId);
+      if (!this.gamePresenterLastCommandSentPerType[gameCode]) {
+        this.gamePresenterLastCommandSentPerType[gameCode] = {};
+      }
+      this.gamePresenterLastCommandSentPerType[gameCode][payload.type] = payload as OutgoingPresenterCommand;
+    }
+
     const socketId = this.clientIdToSocketId[clientId];
     if (!socketId) {
       console.log(`[COMMS] WARNING! No socket found for client: '${clientId}'.`);
@@ -337,12 +365,21 @@ export class SocketCommunicator {
     this.io.to(socketId).emit(SOCKET_EVENTS.COMMAND, payload);
   }
 
-  catchup(clientId: string) {
+  playerCatchup(clientId: string) {
     // Resend the last command we sent to player
-    // NB: Presenter's catchup should send all previous commands, or a subset. Since e.g. 'timer' updates won't be enough on their own.
-    const command = this.lastCommandSent[clientId];
+    const command = this.playerLastCommandSent[clientId];
     if (command) {
       this.send(clientId, command);
     }
   }
+
+  presenterCatchup(clientId: string) {
+    // Resend the last of every type of command to the presenter
+    const gameCode = Presenter.gameCodeFromId(clientId);
+    Object.values(this.gamePresenterLastCommandSentPerType[gameCode] || {}).forEach((v) => {
+      this.send(clientId, v);
+    });
+  }
 }
+
+// TODO: Standardize with where these IDs are generated
