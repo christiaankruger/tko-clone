@@ -1,17 +1,28 @@
 import { observable, action, computed, runInAction } from 'mobx';
 import { IPromiseBasedObservable, fromPromise } from 'mobx-utils';
 import { Post } from '../../../frontend-shared/util/API';
-import { GameCreateResult, GameWatchResult, OutgoingPresenterCommand } from '../../../lib/SharedTypes';
+import {
+  GameCreateResult,
+  GameWatchResult,
+  OutgoingPresenterCommand,
+  PresenterCommandStep,
+  StepPresenterCommandMetadata,
+  PresenterCommandStepMetadata,
+} from '../../../lib/SharedTypes';
 import { Presenter, Player } from '../../../server/Games/Game';
 
 export enum Pages {
   LANDING = 'landing',
   LOBBY = 'lobby',
+  ROUND = 'round',
+  EXPLAIN_AND_WAIT = 'explain-and-wait',
+  ANNOUNCEMENT = 'announcement',
+  VS_VOTE = 'vs-vote',
 }
 
 export class Store {
   @observable
-  currentPage: Pages = Pages.LANDING;
+  currentPage: Pages = Pages.VS_VOTE;
 
   @observable
   load?: IPromiseBasedObservable<any> = undefined;
@@ -27,10 +38,43 @@ export class Store {
   @observable
   players: Player[] = [];
 
+  @observable
+  metadata: PresenterCommandStepMetadata = {};
+
+  @observable
+  timer: number = 0;
+
   @action
   consumeCommand = (command: OutgoingPresenterCommand) => {
+    console.log(`Consuming command`, command);
+
     if (command.type === 'all-players') {
       this.players = command.metadata.players.map((p: any) => new Player(p));
+    }
+    if (command.type === 'step') {
+      // Special case, all screens are enclosed in 'step'
+      const stepData = command.metadata as StepPresenterCommandMetadata;
+      const step = stepData.step;
+      Object.assign(this.metadata, stepData.metadata);
+
+      if (step === 'round') {
+        this.goToPage(Pages.ROUND);
+      }
+      if (step === 'explain-and-wait') {
+        this.goToPage(Pages.EXPLAIN_AND_WAIT);
+      }
+      if (step === 'announcement') {
+        this.goToPage(Pages.ANNOUNCEMENT);
+      }
+      if (step === 'vs-vote') {
+        this.goToPage(Pages.VS_VOTE);
+      }
+    }
+    if (command.type === 'pure-metadata') {
+      Object.assign(this.metadata, command.metadata);
+    }
+    if (command.type === 'timer') {
+      this.timer = command.metadata.time;
     }
   };
 

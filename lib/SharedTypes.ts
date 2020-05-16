@@ -1,4 +1,5 @@
 import { Player, Presenter } from '../server/Games/Game';
+import { Shirt } from '../server/Games/TKOMechanics';
 
 export interface IncomingCommand extends CommandBody {
   sourcePlayerId: string;
@@ -17,7 +18,30 @@ export interface OutgoingPresenterCommand extends CommandBody {
 }
 
 export type PlayerCommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score' | 'wait';
-export type PresenterCommandType = 'all-players' | 'timer';
+// Same same but all different (todo: find better names)
+export type PresenterCommandType = 'all-players' | 'timer' | 'step' | 'pure-metadata';
+export type PresenterCommandStep = 'round' | 'explain-and-wait' | 'announcement' | 'vs-vote';
+export type PresenterCommandStepMetadata = Partial<{
+  roundNumber: number;
+  roundName: string;
+
+  explainText: {
+    heading: string;
+    explainer: string;
+    shirt?: Shirt;
+  };
+  explainStats: { player: Player; status: number | string }[];
+
+  announcementHeading: string;
+  announcementSubtext: string;
+
+  vsVoteContenders: Shirt[];
+}>;
+
+export type StepPresenterCommandMetadata = {
+  step: PresenterCommandStep;
+  metadata: PresenterCommandStepMetadata;
+};
 
 export type GameType = 'tko'; // More to follow.
 

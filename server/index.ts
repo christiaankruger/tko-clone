@@ -14,7 +14,7 @@ import {
   GameCreateResult,
 } from '../lib/SharedTypes';
 import { IGame } from './Games/Game';
-import { blue, blueBright } from 'chalk';
+import { blue, blueBright, yellowBright } from 'chalk';
 
 const env = {
   port: process.env.PORT || 7024,
@@ -62,10 +62,12 @@ router.post('/:code/join', ensureRoomCodeExists, (ctx, next) => {
   if (existingPlayer) {
     // Player exists. We assume they disconnected and they're just replacing the old one.
     ctx.body = { player: existingPlayer, gameType: set.game.gameType };
+    console.log(yellowBright(`'${existingPlayer.id}' joined game ${set.game.gameCode}'.`));
     return next();
   }
 
   const player = set.game.addPlayer(name);
+  console.log(yellowBright(`'${player.id}' joined game '${set.game.gameCode}'.`));
   ctx.body = { player } as PlayerJoinResult;
 });
 

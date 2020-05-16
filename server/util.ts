@@ -20,3 +20,6 @@ export const shuffle = <T>(array: T[]): T[] => {
   return array;
 };
 
+export const sample = <T>(array: T[]): T => {
+  return array[Math.floor(Math.random() * array.length)];
+};

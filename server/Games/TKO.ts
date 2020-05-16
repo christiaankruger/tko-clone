@@ -5,11 +5,14 @@ import {
   SOCKET_EVENTS,
   GameType,
   OutgoingPresenterCommand,
+  PresenterCommandStep,
+  PresenterCommandStepMetadata,
+  PresenterCommandType,
 } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
 import { Player, IGame, Presenter } from './Game';
 import { Design, Slogan, Round, Shirt, ShirtScore, AdhocScore, shortId, Vote } from './TKOMechanics';
-import { generateRoomCode, shuffle } from '../util';
+import { generateRoomCode, shuffle, sample } from '../util';
 import { take, pipe, compose, filter, last } from 'ramda';
 
 export interface TKOProps {
@@ -27,8 +30,9 @@ export class TKO implements IGame {
   slogans: Slogan[] = [];
 
   currentRound: Round = new Round();
-
   gameType: GameType = 'tko';
+
+  explainAndWaitUpdater?: () => { player: Player; status: number | string }[];
 
   constructor(private options: TKOProps) {}
 
@@ -69,14 +73,99 @@ export class TKO implements IGame {
 
   async orchestrate() {
     // Round 1
-    await this.collectDesigns();
+    const ROUND_1_DESIGNS = 3;
+    await this.announceRound(1, 'The Drawening');
+    this.explainAndWait(
+      {
+        heading: "Let's draw some shirts!",
+        explainer: `Draw a total of ${ROUND_1_DESIGNS} shirts! ${sample(
+          inspirations
+        )} You'll get bonus points if your design gets used on someone else's shirt.`,
+      },
+      () => {
+        // Compute new
+        return this.players.map((player) => {
+          const count = this.designs.filter((d) => d.createdBy === player.id).length;
+          return {
+            player,
+            status: count,
+          };
+        });
+      }
+    );
+    for (let i = 0; i < ROUND_1_DESIGNS; i++) {
+      await this.collectDesigns();
+    }
+    this.explainAndWait(
+      {
+        heading: "Let's get writing!",
+        explainer: `Write as many slogans as you can! ${sample(
+          inspirations
+        )} You'll get bonus points if your slogan gets used on someone else's shirt.`,
+      },
+      () => {
+        // Compute new
+        return this.players.map((player) => {
+          const count = this.slogans.filter((d) => d.createdBy === player.id).length;
+          return {
+            player,
+            status: count,
+          };
+        });
+      }
+    );
     await this.collectSlogans();
+
+    this.explainAndWait(
+      {
+        heading: "We've got a shirt to build",
+        explainer: `Build a beautiful shirt! Be funny, witty or straight up weird.`,
+      },
+      () => {
+        // Compute new
+        return this.players.map((player) => {
+          const count = this.currentRound.shirts.filter((s) => s.createdBy === player.id).length;
+          return {
+            player,
+            status: count,
+          };
+        });
+      }
+    );
     await this.collectShirts(this.designs, this.slogans);
+    await this.makeAnnouncement(
+      {
+        heading: 'Time to award some points',
+        subtext:
+          'Assign every shirt a score between 100 and 500. The top two shirts will proceed to the final votedown.',
+      },
+      5
+    );
 
     for (let i = 0; i < this.currentRound.shirts.length; i++) {
       this.sendToAllPlayers({ type: 'wait', metadata: {} });
-      await this.collectScoresFor(this.currentRound.shirts[i], [100, 200, 300, 400, 500]);
+      const shirt = this.currentRound.shirts[i];
+
+      this.explainAndWait(
+        {
+          heading: 'Whatcha think?',
+          explainer: 'How do you rate this shirt?',
+          shirt,
+        },
+        () => {
+          // DONT tally up votes here, it leaks info about whose shirt it is.
+          return this.players.map((player) => {
+            return {
+              player,
+              status: 'REDACTED',
+            };
+          });
+        }
+      );
+
+      await this.collectScoresFor(shirt, [100, 200, 300, 400, 500]);
     }
+
     const allScores = this.currentRound.shirts.map((shirt) => {
       const score = this.currentRound.shirtScores
         .filter((s) => s.shirt.id === shirt.id)
@@ -93,9 +182,69 @@ export class TKO implements IGame {
     );
 
     this.sendToAllPlayers({ type: 'wait', metadata: {} });
+    await this.makeAnnouncement(
+      {
+        heading: "It's the final votedown!",
+        subtext: 'Your top two are ready. May the best shirt win.',
+      },
+      5
+    );
+
+    this.sendStepToAllPresenters('vs-vote', {
+      vsVoteContenders: topTwo.map((t) => t.shirt),
+    });
     await this.collectVotesBetween(topTwo.map((t) => t.shirt));
     // TODO: Tally up votes, convert to scores
     // TODO: Tally up scores (remember adhoc scores)
+  }
+
+  private makeAnnouncement = async (options: { heading: string; subtext?: string }, pauseFor?: number) => {
+    this.sendStepToAllPresenters('announcement', {
+      announcementHeading: options.heading,
+      announcementSubtext: options.subtext,
+    });
+    if (pauseFor) {
+      await waitFor(pauseFor);
+    }
+  };
+
+  private explainAndWait = (
+    options: { heading: string; explainer: string; shirt?: Shirt },
+    explainAndWaitUpdater: () => { player: Player; status: number | string }[]
+  ) => {
+    const { heading, explainer, shirt = undefined } = options;
+    this.explainAndWaitUpdater = explainAndWaitUpdater;
+    this.sendStepToAllPresenters('explain-and-wait', {
+      explainText: {
+        heading,
+        explainer,
+        shirt,
+      },
+      explainStats: [],
+    });
+    this.updateExplainAndWait();
+  };
+
+  private updateExplainAndWait = () => {
+    if (!this.explainAndWaitUpdater) {
+      return;
+    }
+
+    this.sendToAllPresenters({
+      type: 'pure-metadata',
+      metadata: {
+        explainStats: this.explainAndWaitUpdater(),
+      },
+    });
+  };
+
+  private emitTimer(time: number) {
+    this.sendToAllPresenters({
+      type: 'timer',
+      metadata: {
+        time,
+      },
+    });
   }
 
   private async collectVotesBetween(shirts: Shirt[]) {
@@ -117,6 +266,7 @@ export class TKO implements IGame {
     });
 
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       if (last(this.currentRound.votingRounds)!.length === targetVotes) {
         return;
@@ -142,6 +292,7 @@ export class TKO implements IGame {
     const targetScoreCount = this.currentRound.shirtScores.length + scoringPlayers.length;
 
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       if (this.currentRound.shirtScores.length === targetScoreCount) {
         return;
@@ -156,6 +307,7 @@ export class TKO implements IGame {
       metadata: {},
     });
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       // TODO: Emit timer to presenter
       if (this.designs.length === targetDesignCount) {
@@ -170,6 +322,7 @@ export class TKO implements IGame {
       metadata: {},
     });
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       // TODO: Emit timer to presenter
       if (this.slogans.length === targetSloganCount) {
@@ -210,6 +363,7 @@ export class TKO implements IGame {
 
     const targetShirts = this.currentRound.shirts.length + this.players.length;
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       // TODO: Emit timer to presenter
       if (this.currentRound.shirts.length === targetShirts) {
@@ -217,6 +371,14 @@ export class TKO implements IGame {
       }
     }
   }
+
+  private announceRound = async (roundNumber: number, roundName: string) => {
+    this.sendStepToAllPresenters('round', {
+      roundNumber,
+      roundName,
+    });
+    await waitFor(3);
+  };
 
   input(command: IncomingCommand): OutgoingPlayerCommand {
     console.log(`[${this.gameCode}]: Received command: ${JSON.stringify(command)}`);
@@ -227,6 +389,7 @@ export class TKO implements IGame {
       });
       console.log(`Created design: ${JSON.stringify(design, null, 2)}`);
       this.designs.push(design);
+      this.updateExplainAndWait();
       return {
         type: 'wait',
         metadata: {},
@@ -239,6 +402,7 @@ export class TKO implements IGame {
       });
       console.log(`Created slogan: ${JSON.stringify(slogan, null, 2)}`);
       this.slogans.push(slogan);
+      this.updateExplainAndWait();
       return {
         type: 'slogan',
         metadata: {},
@@ -253,6 +417,7 @@ export class TKO implements IGame {
       });
       console.log(`Received shirt with design: '${designId}' and slogan '${sloganId}'.`);
       this.currentRound.shirts.push(shirt);
+      this.updateExplainAndWait();
       return {
         type: 'wait',
         metadata: {},
@@ -287,6 +452,8 @@ export class TKO implements IGame {
       this.currentRound.adhocScores.push(designScore);
       this.currentRound.adhocScores.push(sloganScore);
 
+      this.updateExplainAndWait();
+
       return {
         type: 'wait',
         metadata: {},
@@ -299,6 +466,8 @@ export class TKO implements IGame {
         voteFor: this.currentRound.shirts.find((s) => s.id === targetId)!,
       });
       console.log(`Player '${vote.scorerId}' voted for '${vote.voteFor.id}'.`);
+      last(this.currentRound.votingRounds)!.push(vote);
+      this.updateExplainAndWait();
       return {
         type: 'wait',
         metadata: {},
@@ -312,6 +481,16 @@ export class TKO implements IGame {
     console.log(`[${this.gameCode}] Sending to all players: ${JSON.stringify(payload)}`);
     this.players.forEach(({ id }) => {
       this.options.onCommunicate(id, payload);
+    });
+  }
+
+  private sendStepToAllPresenters(step: PresenterCommandStep, metadata: PresenterCommandStepMetadata) {
+    this.sendToAllPresenters({
+      type: 'step',
+      metadata: {
+        step,
+        metadata,
+      },
     });
   }
 
@@ -382,4 +561,10 @@ export class SocketCommunicator {
   }
 }
 
+export const waitFor = async (second: number) => {
+  await new Promise((resolve) => setTimeout(resolve, second * 1000));
+};
+
 // TODO: Standardize with where these IDs are generated
+
+const inspirations = ['Do it for glory!', 'Go for gold!', 'Be simply the best!'];

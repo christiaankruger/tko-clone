@@ -68,7 +68,16 @@ export class Vote {
   }
 }
 
+export interface TypeMap {
+  shirt: Shirt;
+  shirtScore: ShirtScore;
+  adhocScore: AdhocScore;
+  vote: Vote;
+}
+
 export class Round {
+  constructor() {}
+
   shirts: Shirt[] = [];
   shirtScores: ShirtScore[] = [];
   adhocScores: AdhocScore[] = [];
