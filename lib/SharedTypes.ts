@@ -21,6 +21,12 @@ export type PlayerCommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score'
 // Same same but all different (todo: find better names)
 export type PresenterCommandType = 'all-players' | 'timer' | 'step' | 'pure-metadata';
 export type PresenterCommandStep = 'round' | 'explain-and-wait' | 'announcement' | 'vs-vote';
+export type VSVoteResult = {
+  forShirtId: string;
+  voterName: string;
+  scoreValue: number;
+};
+
 export type PresenterCommandStepMetadata = Partial<{
   roundNumber: number;
   roundName: string;
@@ -34,8 +40,10 @@ export type PresenterCommandStepMetadata = Partial<{
 
   announcementHeading: string;
   announcementSubtext: string;
+  announcementShirt: Shirt;
 
   vsVoteContenders: Shirt[];
+  vsVoteVotes: VSVoteResult[];
 }>;
 
 export type StepPresenterCommandMetadata = {

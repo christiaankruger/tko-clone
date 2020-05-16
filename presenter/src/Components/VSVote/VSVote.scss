@@ -41,4 +41,25 @@
     display: grid;
     grid-template-columns: 50% 50%;
   }
+
+  &__contender {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    > * {
+      margin-bottom: 20px;
+    }
+  }
+
+  &__vote-results {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    column-gap: 8px;
+    row-gap: 8px;
+  }
+
+  &__score-result {
+    color: #4581d1;
+  }
 }

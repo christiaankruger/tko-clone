@@ -8,6 +8,7 @@ import {
   PresenterCommandStep,
   PresenterCommandStepMetadata,
   PresenterCommandType,
+  VSVoteResult,
 } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
 import { Player, IGame, Presenter } from './Game';
@@ -73,7 +74,7 @@ export class TKO implements IGame {
 
   async orchestrate() {
     // Round 1
-    const ROUND_1_DESIGNS = 3;
+    const ROUND_1_DESIGNS = 2;
     await this.announceRound(1, 'The Drawening');
     this.explainAndWait(
       {
@@ -166,15 +167,39 @@ export class TKO implements IGame {
       await this.collectScoresFor(shirt, [100, 200, 300, 400, 500]);
     }
 
-    const allScores = this.currentRound.shirts.map((shirt) => {
-      const score = this.currentRound.shirtScores
-        .filter((s) => s.shirt.id === shirt.id)
-        .map((shirtScore) => shirtScore.value)
-        .reduce((memo, x) => memo + x, 0);
-      return { shirt, score };
-    });
-    // TODO: Broadcast scores to presenter
-    const topTwo = take(2)(allScores.sort((a, b) => b.score - a.score));
+    const allScores = this.currentRound.shirts
+      .map((shirt) => {
+        const score = this.currentRound.shirtScores
+          .filter((s) => s.shirt.id === shirt.id)
+          .map((shirtScore) => shirtScore.value)
+          .reduce((memo, x) => memo + x, 0);
+        return { shirt, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    await this.makeAnnouncement(
+      {
+        heading: 'The scores are in!',
+        subtext: 'But first, a few honorable mentions',
+      },
+      5
+    );
+
+    // Loser announcement
+    for (let j = allScores.length - 1; j >= 2; j--) {
+      const details = allScores[j];
+      const playerName = this.players.find((p) => p.id === details.shirt.createdBy)!.name;
+
+      await this.makeAnnouncement(
+        {
+          heading: `${j + 1}: ${playerName} (+ ${details.score})`,
+          shirt: details.shirt,
+        },
+        3
+      );
+    }
+
+    const topTwo = shuffle(take(2)(allScores));
     console.log(
       `[${this.gameCode}]: Voting happens between: ${JSON.stringify(
         topTwo.map((t) => ({ shirtId: t.shirt.id, score: t.score }))
@@ -194,14 +219,56 @@ export class TKO implements IGame {
       vsVoteContenders: topTwo.map((t) => t.shirt),
     });
     await this.collectVotesBetween(topTwo.map((t) => t.shirt));
+
+    // Broadcast voting result
+    await this.broadcastVotingResult();
+    await waitFor(5);
+
     // TODO: Tally up votes, convert to scores
     // TODO: Tally up scores (remember adhoc scores)
   }
 
-  private makeAnnouncement = async (options: { heading: string; subtext?: string }, pauseFor?: number) => {
+  private broadcastVotingResult = async () => {
+    const votingRound = last(this.currentRound.votingRounds)!;
+    const voteValue = Math.floor(1_000 / votingRound.length);
+
+    // Convert to scores:
+    votingRound.forEach((vote) => {
+      this.currentRound.adhocScores.push({
+        scorerId: vote.scorerId,
+        targetId: vote.voteFor.createdBy,
+        id: shortId('adhoc'),
+        reason: 'Votedown vote',
+        value: voteValue,
+      });
+    });
+
+    const running: VSVoteResult[] = [];
+    for (let i = 0; i < votingRound.length; i++) {
+      const vote = votingRound[i];
+      running.push({
+        voterName: this.players.find((p) => p.id === vote.scorerId)!.name,
+        scoreValue: voteValue,
+        forShirtId: vote.voteFor.id,
+      });
+      this.sendToAllPresenters({
+        type: 'pure-metadata',
+        metadata: {
+          vsVoteVotes: running,
+        },
+      });
+      await waitFor(0.5);
+    }
+  };
+
+  private makeAnnouncement = async (
+    options: { heading: string; subtext?: string; shirt?: Shirt },
+    pauseFor?: number
+  ) => {
     this.sendStepToAllPresenters('announcement', {
       announcementHeading: options.heading,
       announcementSubtext: options.subtext,
+      announcementShirt: options.shirt,
     });
     if (pauseFor) {
       await waitFor(pauseFor);
@@ -437,11 +504,13 @@ export class TKO implements IGame {
         scorerId: command.sourcePlayerId,
         targetId: shirt.design.createdBy,
         value: value / 2,
+        reason: 'Design bonus',
       });
       const sloganScore = new AdhocScore({
         scorerId: command.sourcePlayerId,
         targetId: shirt.slogan.createdBy,
         value: value / 2,
+        reason: 'Slogan bonus',
       });
 
       console.log(`Registered a shirt score of '${shirtScore.value}' for '${shirtScore.shirt.createdBy}.`);

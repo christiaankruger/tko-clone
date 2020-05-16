@@ -113,27 +113,24 @@ export class Presenter extends Component {
     if (store.currentPage === Pages.ANNOUNCEMENT) {
       const heading = store.metadata.announcementHeading!;
       const subtext = store.metadata.announcementSubtext;
+      const shirt = store.metadata.announcementShirt;
 
-      return <Announcement heading={heading} subtext={subtext} />;
+      return <Announcement heading={heading} subtext={subtext} shirt={shirt} />;
     }
     if (store.currentPage === Pages.VS_VOTE) {
-      const contenders = dummyShirtOptions.map((s) => {
-        return new Shirt({
-          createdBy: 'a',
-          design: {
-            base64: s,
-            createdBy: 'a',
-            id: 'a',
-          },
-          slogan: {
-            createdBy: 'b',
-            id: 'b',
-            text: 'I is a zupper funny slogan',
-          },
-        });
-      });
-      // const contenders = store.metadata.vsVoteContenders!;
-      return <VSVote timer={store.timer} contenders={contenders} />;
+      const contenders = store.metadata.vsVoteContenders!;
+      return (
+        <VSVote
+          timer={store.timer}
+          contenders={contenders.map((c) => {
+            return {
+              ...c,
+              creatorName: store.players.find((p) => p.id === c.createdBy)!.name,
+            };
+          })}
+          votes={store.metadata.vsVoteVotes}
+        />
+      );
     }
 
     return <div>Girl, what?</div>;

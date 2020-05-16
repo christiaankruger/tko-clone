@@ -22,7 +22,7 @@ export enum Pages {
 
 export class Store {
   @observable
-  currentPage: Pages = Pages.VS_VOTE;
+  currentPage: Pages = Pages.LANDING;
 
   @observable
   load?: IPromiseBasedObservable<any> = undefined;

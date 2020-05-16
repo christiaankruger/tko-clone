@@ -14,12 +14,15 @@
   border: 1px solid lightgray;
   border-radius: 2px;
 
+  > * {
+    margin-bottom: 12px;
+  }
+
   .jcp-heading {
     font-size: 32px !important;
   }
 
   &__subtext {
-    margin-top: 8px;
     font-size: 18px;
     font-weight: bold;
   }
