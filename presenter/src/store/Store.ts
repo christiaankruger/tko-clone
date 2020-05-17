@@ -18,6 +18,7 @@ export enum Pages {
   EXPLAIN_AND_WAIT = 'explain-and-wait',
   ANNOUNCEMENT = 'announcement',
   VS_VOTE = 'vs-vote',
+  SHOW_SCORES = 'show-scores',
 }
 
 export class Store {
@@ -55,7 +56,13 @@ export class Store {
       // Special case, all screens are enclosed in 'step'
       const stepData = command.metadata as StepPresenterCommandMetadata;
       const step = stepData.step;
-      Object.assign(this.metadata, stepData.metadata);
+      if (step === 'announcement') {
+        // Explicitly clear what we don't re-set. // Find better way to do this.
+        const { announcementHeading, announcementSubtext, announcementShirt } = stepData.metadata;
+        Object.assign(this.metadata, { announcementHeading, announcementSubtext, announcementShirt });
+      } else {
+        Object.assign(this.metadata, stepData.metadata);
+      }
 
       if (step === 'round') {
         this.goToPage(Pages.ROUND);
@@ -68,6 +75,9 @@ export class Store {
       }
       if (step === 'vs-vote') {
         this.goToPage(Pages.VS_VOTE);
+      }
+      if (step === 'show-scores') {
+        this.goToPage(Pages.SHOW_SCORES);
       }
     }
     if (command.type === 'pure-metadata') {

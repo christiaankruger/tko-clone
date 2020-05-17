@@ -20,11 +20,16 @@ export interface OutgoingPresenterCommand extends CommandBody {
 export type PlayerCommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score' | 'wait';
 // Same same but all different (todo: find better names)
 export type PresenterCommandType = 'all-players' | 'timer' | 'step' | 'pure-metadata';
-export type PresenterCommandStep = 'round' | 'explain-and-wait' | 'announcement' | 'vs-vote';
+export type PresenterCommandStep = 'round' | 'explain-and-wait' | 'announcement' | 'vs-vote' | 'show-scores';
 export type VSVoteResult = {
   forShirtId: string;
   voterName: string;
   scoreValue: number;
+};
+
+export type ScoreInfo = {
+  name: string;
+  value: number;
 };
 
 export type PresenterCommandStepMetadata = Partial<{
@@ -44,6 +49,9 @@ export type PresenterCommandStepMetadata = Partial<{
 
   vsVoteContenders: Shirt[];
   vsVoteVotes: VSVoteResult[];
+
+  showScoresScores: ScoreInfo[];
+  showScoresCategory: string;
 }>;
 
 export type StepPresenterCommandMetadata = {

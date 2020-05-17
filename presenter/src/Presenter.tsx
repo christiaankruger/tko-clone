@@ -17,6 +17,7 @@ import { dummyShirtOptions } from './dummy/shirt';
 import { Shirt } from '../../server/Games/TKOMechanics';
 import { Announcement } from './Components/Announcement/Announcement';
 import { VSVote } from './Components/VSVote/VSVote';
+import { ShowScores } from './Components/ShowScores/ShowScores';
 
 const socket = SocketIO('http://localhost:7024');
 const store = new Store();
@@ -131,6 +132,19 @@ export class Presenter extends Component {
           votes={store.metadata.vsVoteVotes}
         />
       );
+    }
+    if (store.currentPage === Pages.SHOW_SCORES) {
+      // const scores = [
+      //   { name: 'Christiaan', value: 1234 },
+      //   { name: 'Hannes', value: 2343 },
+      //   { name: 'Hein', value: 2345 },
+      //   { name: 'Zubear', value: 1234 },
+      // ];
+
+      const scores = store.metadata.showScoresScores!;
+      const category = store.metadata.showScoresCategory!;
+
+      return <ShowScores scores={scores} category={category} />;
     }
 
     return <div>Girl, what?</div>;

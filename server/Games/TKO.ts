@@ -9,6 +9,7 @@ import {
   PresenterCommandStepMetadata,
   PresenterCommandType,
   VSVoteResult,
+  ScoreInfo,
 } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
 import { Player, IGame, Presenter } from './Game';
@@ -21,6 +22,12 @@ export interface TKOProps {
 }
 
 export type OnCommunicateType = (playerId: string, payload: OutgoingPlayerCommand | OutgoingPresenterCommand) => void;
+
+export enum ADHOC_REASON {
+  DESIGN = 'design',
+  SLOGAN = 'slogan',
+  VOTE = 'vote',
+}
 
 export class TKO implements IGame {
   gameCode: string = generateRoomCode();
@@ -158,7 +165,7 @@ export class TKO implements IGame {
           return this.players.map((player) => {
             return {
               player,
-              status: 'REDACTED',
+              status: '?',
             };
           });
         }
@@ -195,7 +202,7 @@ export class TKO implements IGame {
           heading: `${j + 1}: ${playerName} (+ ${details.score})`,
           shirt: details.shirt,
         },
-        3
+        8
       );
     }
 
@@ -221,14 +228,70 @@ export class TKO implements IGame {
     await this.collectVotesBetween(topTwo.map((t) => t.shirt));
 
     // Broadcast voting result
-    await this.broadcastVotingResult();
+    await this.computeAndBroadcastVotingResult();
     await waitFor(5);
+
+    await this.makeAnnouncement({ heading: 'Time for some scores!' }, 3);
+    const shirtScores = this.players.map((p) => {
+      const value = this.currentRound.shirtScores
+        .filter((s) => s.shirt.createdBy === p.id)
+        .reduce((memo, x) => memo + x.value, 0);
+      return {
+        name: p.name,
+        value,
+      } as ScoreInfo;
+    });
+    await this.showScores('Shirt scores', shirtScores);
+
+    const sloganScores = this.players.map((p) => {
+      const value = this.currentRound.adhocScores
+        .filter((s) => s.reason === ADHOC_REASON.SLOGAN && s.targetId === p.id)
+        .reduce((memo, x) => memo + x.value, 0);
+      return {
+        name: p.name,
+        value,
+      } as ScoreInfo;
+    });
+    await this.showScores('Slogan bonuses', sloganScores);
+    const designScores = this.players.map((p) => {
+      const value = this.currentRound.adhocScores
+        .filter((s) => s.reason === ADHOC_REASON.DESIGN && s.targetId === p.id)
+        .reduce((memo, x) => memo + x.value, 0);
+      return {
+        name: p.name,
+        value,
+      } as ScoreInfo;
+    });
+    await this.showScores('Design bonuses', designScores);
+    this.computeFinalScoresForRound();
+    await this.showScores(
+      'Final scores for round 1',
+      this.currentRound.finalScores.map((s) => {
+        return {
+          name: s.player.name,
+          value: s.score,
+        };
+      })
+    );
 
     // TODO: Tally up votes, convert to scores
     // TODO: Tally up scores (remember adhoc scores)
   }
 
-  private broadcastVotingResult = async () => {
+  private computeFinalScoresForRound() {
+    const round = this.currentRound;
+    const finalScores = this.players.map((p) => {
+      const shirts = sumOfScores(round.shirtScores.filter((s) => s.shirt.createdBy === p.id));
+      const adhoc = sumOfScores(round.adhocScores.filter((s) => s.targetId === p.id));
+      return {
+        player: p,
+        score: shirts + adhoc,
+      };
+    });
+    round.finalScores = finalScores;
+  }
+
+  private computeAndBroadcastVotingResult = async () => {
     const votingRound = last(this.currentRound.votingRounds)!;
     const voteValue = Math.floor(1_000 / votingRound.length);
 
@@ -238,7 +301,7 @@ export class TKO implements IGame {
         scorerId: vote.scorerId,
         targetId: vote.voteFor.createdBy,
         id: shortId('adhoc'),
-        reason: 'Votedown vote',
+        reason: ADHOC_REASON.VOTE,
         value: voteValue,
       });
     });
@@ -267,8 +330,8 @@ export class TKO implements IGame {
   ) => {
     this.sendStepToAllPresenters('announcement', {
       announcementHeading: options.heading,
-      announcementSubtext: options.subtext,
-      announcementShirt: options.shirt,
+      announcementSubtext: options.subtext || '',
+      announcementShirt: options.shirt || undefined,
     });
     if (pauseFor) {
       await waitFor(pauseFor);
@@ -312,6 +375,14 @@ export class TKO implements IGame {
         time,
       },
     });
+  }
+
+  private async showScores(category: string, scores: ScoreInfo[]) {
+    this.sendStepToAllPresenters('show-scores', {
+      showScoresScores: scores,
+      showScoresCategory: category,
+    });
+    await waitFor(10);
   }
 
   private async collectVotesBetween(shirts: Shirt[]) {
@@ -504,13 +575,13 @@ export class TKO implements IGame {
         scorerId: command.sourcePlayerId,
         targetId: shirt.design.createdBy,
         value: value / 2,
-        reason: 'Design bonus',
+        reason: ADHOC_REASON.DESIGN,
       });
       const sloganScore = new AdhocScore({
         scorerId: command.sourcePlayerId,
         targetId: shirt.slogan.createdBy,
         value: value / 2,
-        reason: 'Slogan bonus',
+        reason: ADHOC_REASON.SLOGAN,
       });
 
       console.log(`Registered a shirt score of '${shirtScore.value}' for '${shirtScore.shirt.createdBy}.`);
@@ -637,3 +708,6 @@ export const waitFor = async (second: number) => {
 // TODO: Standardize with where these IDs are generated
 
 const inspirations = ['Do it for glory!', 'Go for gold!', 'Be simply the best!'];
+const sumOfScores = (scores: { value: number }[]) => {
+  return scores.reduce((memo, x) => memo + x.value, 0);
+};
