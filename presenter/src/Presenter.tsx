@@ -9,12 +9,10 @@ import { Store, Pages } from './store/Store';
 import { Post } from '../../frontend-shared/util/API';
 import { Landing } from './Components/Landing/Landing';
 import { Lobby } from './Components/Lobby/Lobby';
+
 import { SOCKET_EVENTS, OutgoingPresenterCommand } from '../../lib/SharedTypes';
 import { Round } from './Components/Round/Round';
 import { ExplainAndWait } from './Components/ExplainAndWait/ExplainAndWait';
-import { Player } from '../../server/Games/Game';
-import { dummyShirtOptions } from './dummy/shirt';
-import { Shirt } from '../../server/Games/TKOMechanics';
 import { Announcement } from './Components/Announcement/Announcement';
 import { VSVote } from './Components/VSVote/VSVote';
 import { ShowScores } from './Components/ShowScores/ShowScores';
