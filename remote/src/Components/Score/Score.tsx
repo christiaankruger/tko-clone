@@ -18,7 +18,7 @@ export class Score extends Component<ScoreProps> {
       <div className={BEM()}>
         <Heading>Score</Heading>
         <div className={BEM('description')}>{this.props.description}</div>
-        {this.props.possibleScores.map(this.scoreButton)}
+        <div className={BEM('button-container')}>{this.props.possibleScores.map(this.scoreButton)}</div>
       </div>
     );
   }
