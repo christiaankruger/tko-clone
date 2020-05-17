@@ -1,0 +1,14 @@
+.jcp-landing {
+  padding: 48px 96px;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+
+  background-color: white;
+  border: 1px solid lightgray;
+  border-radius: 2px;
+
+  > * {
+    margin-bottom: 16px !important;
+  }
+}

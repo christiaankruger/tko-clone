@@ -1,5 +1,5 @@
 import { observable, action, computed } from 'mobx';
-import { OutgoingCommand } from '../../../lib/SharedTypes';
+import { OutgoingPlayerCommand } from '../../../lib/SharedTypes';
 
 export enum Pages {
   LOGIN = 'login',
@@ -40,7 +40,7 @@ export class Store {
   }
 
   @action
-  consumeCommand(command: OutgoingCommand) {
+  consumeCommand(command: OutgoingPlayerCommand) {
     this.metadata = command.metadata;
 
     if (command.type === 'design') {

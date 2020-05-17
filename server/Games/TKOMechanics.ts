@@ -1,4 +1,5 @@
 import { v4 } from 'uuid';
+import { Player } from './Game';
 
 export const shortId = (namespace: string) => {
   return `${namespace}-${v4().split('-')[0]}`;
@@ -52,8 +53,9 @@ export class AdhocScore {
   scorerId!: string;
   targetId!: string;
   value!: number;
+  reason!: string;
 
-  constructor(props: { scorerId: string; targetId: string; value: number }) {
+  constructor(props: { scorerId: string; targetId: string; value: number; reason: string }) {
     Object.assign(this, props);
   }
 }
@@ -68,9 +70,20 @@ export class Vote {
   }
 }
 
+export interface TypeMap {
+  shirt: Shirt;
+  shirtScore: ShirtScore;
+  adhocScore: AdhocScore;
+  vote: Vote;
+}
+
 export class Round {
+  constructor() {}
+
   shirts: Shirt[] = [];
   shirtScores: ShirtScore[] = [];
   adhocScores: AdhocScore[] = [];
   votingRounds: Vote[][] = [];
+
+  finalScores: { player: Player; score: number }[] = [];
 }

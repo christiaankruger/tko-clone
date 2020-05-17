@@ -1,38 +1,74 @@
 import { v4 } from 'uuid';
-import { IncomingCommand, OutgoingCommand, SOCKET_EVENTS, GameType } from '../../lib/SharedTypes';
+import {
+  IncomingCommand,
+  OutgoingPlayerCommand,
+  SOCKET_EVENTS,
+  GameType,
+  OutgoingPresenterCommand,
+  PresenterCommandStep,
+  PresenterCommandStepMetadata,
+  PresenterCommandType,
+  VSVoteResult,
+  ScoreInfo,
+} from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
-import { Player, IGame } from './Game';
+import { Player, IGame, Presenter } from './Game';
 import { Design, Slogan, Round, Shirt, ShirtScore, AdhocScore, shortId, Vote } from './TKOMechanics';
-import { generateRoomCode, shuffle } from '../util';
+import { generateRoomCode, shuffle, sample } from '../util';
 import { take, pipe, compose, filter, last } from 'ramda';
 
 export interface TKOProps {
   onCommunicate: OnCommunicateType;
 }
 
-export type OnCommunicateType = (playerId: string, payload: OutgoingCommand) => void;
+export type OnCommunicateType = (playerId: string, payload: OutgoingPlayerCommand | OutgoingPresenterCommand) => void;
+
+export enum ADHOC_REASON {
+  DESIGN = 'design',
+  SLOGAN = 'slogan',
+  VOTE = 'vote',
+}
 
 export class TKO implements IGame {
   gameCode: string = generateRoomCode();
 
   players: Player[] = [];
+  presenters: Presenter[] = [];
   designs: Design[] = [];
   slogans: Slogan[] = [];
 
   currentRound: Round = new Round();
-
   gameType: GameType = 'tko';
+
+  explainAndWaitUpdater?: () => { player: Player; status: number | string }[];
 
   constructor(private options: TKOProps) {}
 
   addPlayer(name: string): Player {
-    const player: Player = {
-      id: shortId(`player-${this.gameCode}-${name}`),
+    const player = new Player({
+      id: Player.generateId(this.gameCode, name),
       name,
-    };
+    });
 
     this.players.push(player);
+
+    this.sendToAllPresenters({
+      type: 'all-players',
+      metadata: {
+        players: this.players,
+      },
+    });
+
     return player;
+  }
+
+  addPresenter(isCreator: boolean = false): Presenter {
+    const presenter = new Presenter({
+      id: Presenter.generateId(this.gameCode),
+      isCreator,
+    });
+    this.presenters.push(presenter);
+    return presenter;
   }
 
   hasPlayerId(playerId: string): boolean {
@@ -45,29 +81,308 @@ export class TKO implements IGame {
 
   async orchestrate() {
     // Round 1
-    await this.collectDesigns();
-    await this.collectSlogans();
-    this.sendToAll({ type: 'wait', metadata: {} });
-    await this.collectShirts(this.designs, this.slogans);
-    this.sendToAll({ type: 'wait', metadata: {} });
-    for (let i = 0; i < this.currentRound.shirts.length; i++) {
-      await this.collectScoresFor(this.currentRound.shirts[i], [100, 200, 300, 400, 500]);
+    const ROUND_1_DESIGNS = 2;
+    await this.announceRound(1, 'The Drawening');
+    this.explainAndWait(
+      {
+        heading: "Let's draw some shirts!",
+        explainer: `Draw a total of ${ROUND_1_DESIGNS} shirts! ${sample(
+          inspirations
+        )} You'll get bonus points if your design gets used on someone else's shirt.`,
+      },
+      () => {
+        // Compute new
+        return this.players.map((player) => {
+          const count = this.designs.filter((d) => d.createdBy === player.id).length;
+          return {
+            player,
+            status: count,
+          };
+        });
+      }
+    );
+    for (let i = 0; i < ROUND_1_DESIGNS; i++) {
+      await this.collectDesigns();
     }
-    const allScores = this.currentRound.shirts.map((shirt) => {
-      const score = this.currentRound.shirtScores
-        .map((shirtScore) => shirtScore.value)
-        .reduce((memo, x) => memo + x, 0);
-      return { shirt, score };
-    });
-    // TODO: Broadcast scores to presenter
-    const topTwo = take(2)(allScores.sort((a, b) => b.score - a.score));
+    this.explainAndWait(
+      {
+        heading: "Let's get writing!",
+        explainer: `Write as many slogans as you can! ${sample(
+          inspirations
+        )} You'll get bonus points if your slogan gets used on someone else's shirt.`,
+      },
+      () => {
+        // Compute new
+        return this.players.map((player) => {
+          const count = this.slogans.filter((d) => d.createdBy === player.id).length;
+          return {
+            player,
+            status: count,
+          };
+        });
+      }
+    );
+    await this.collectSlogans();
+
+    this.explainAndWait(
+      {
+        heading: "We've got a shirt to build",
+        explainer: `Build a beautiful shirt! Be funny, witty or straight up weird.`,
+      },
+      () => {
+        // Compute new
+        return this.players.map((player) => {
+          const count = this.currentRound.shirts.filter((s) => s.createdBy === player.id).length;
+          return {
+            player,
+            status: count,
+          };
+        });
+      }
+    );
+    await this.collectShirts(this.designs, this.slogans);
+    await this.makeAnnouncement(
+      {
+        heading: 'Time to award some points',
+        subtext:
+          'Assign every shirt a score between 100 and 500. The top two shirts will proceed to the final votedown.',
+      },
+      5
+    );
+
+    for (let i = 0; i < this.currentRound.shirts.length; i++) {
+      this.sendToAllPlayers({ type: 'wait', metadata: {} });
+      const shirt = this.currentRound.shirts[i];
+
+      this.explainAndWait(
+        {
+          heading: 'Whatcha think?',
+          explainer: 'How do you rate this shirt?',
+          shirt,
+        },
+        () => {
+          // DONT tally up votes here, it leaks info about whose shirt it is.
+          return this.players.map((player) => {
+            return {
+              player,
+              status: '?',
+            };
+          });
+        }
+      );
+
+      await this.collectScoresFor(shirt, [100, 200, 300, 400, 500]);
+    }
+
+    const allScores = this.currentRound.shirts
+      .map((shirt) => {
+        const score = this.currentRound.shirtScores
+          .filter((s) => s.shirt.id === shirt.id)
+          .map((shirtScore) => shirtScore.value)
+          .reduce((memo, x) => memo + x, 0);
+        return { shirt, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    await this.makeAnnouncement(
+      {
+        heading: 'The scores are in!',
+        subtext: 'But first, a few honorable mentions',
+      },
+      5
+    );
+
+    // Loser announcement
+    for (let j = allScores.length - 1; j >= 2; j--) {
+      const details = allScores[j];
+      const playerName = this.players.find((p) => p.id === details.shirt.createdBy)!.name;
+
+      await this.makeAnnouncement(
+        {
+          heading: `${j + 1}: ${playerName} (+ ${details.score})`,
+          shirt: details.shirt,
+        },
+        8
+      );
+    }
+
+    const topTwo = shuffle(take(2)(allScores));
     console.log(
       `[${this.gameCode}]: Voting happens between: ${JSON.stringify(
         topTwo.map((t) => ({ shirtId: t.shirt.id, score: t.score }))
       )}`
     );
+
+    this.sendToAllPlayers({ type: 'wait', metadata: {} });
+    await this.makeAnnouncement(
+      {
+        heading: "It's the final votedown!",
+        subtext: 'Your top two are ready. May the best shirt win.',
+      },
+      5
+    );
+
+    this.sendStepToAllPresenters('vs-vote', {
+      vsVoteContenders: topTwo.map((t) => t.shirt),
+    });
     await this.collectVotesBetween(topTwo.map((t) => t.shirt));
-    // TODO: Tally up votes
+
+    // Broadcast voting result
+    await this.computeAndBroadcastVotingResult();
+    await waitFor(5);
+
+    await this.makeAnnouncement({ heading: 'Time for some scores!' }, 3);
+    const shirtScores = this.players.map((p) => {
+      const value = this.currentRound.shirtScores
+        .filter((s) => s.shirt.createdBy === p.id)
+        .reduce((memo, x) => memo + x.value, 0);
+      return {
+        name: p.name,
+        value,
+      } as ScoreInfo;
+    });
+    await this.showScores('Shirt scores', shirtScores);
+
+    const sloganScores = this.players.map((p) => {
+      const value = this.currentRound.adhocScores
+        .filter((s) => s.reason === ADHOC_REASON.SLOGAN && s.targetId === p.id)
+        .reduce((memo, x) => memo + x.value, 0);
+      return {
+        name: p.name,
+        value,
+      } as ScoreInfo;
+    });
+    await this.showScores('Slogan bonuses', sloganScores);
+    const designScores = this.players.map((p) => {
+      const value = this.currentRound.adhocScores
+        .filter((s) => s.reason === ADHOC_REASON.DESIGN && s.targetId === p.id)
+        .reduce((memo, x) => memo + x.value, 0);
+      return {
+        name: p.name,
+        value,
+      } as ScoreInfo;
+    });
+    await this.showScores('Design bonuses', designScores);
+    this.computeFinalScoresForRound();
+    await this.showScores(
+      'Final scores for round 1',
+      this.currentRound.finalScores.map((s) => {
+        return {
+          name: s.player.name,
+          value: s.score,
+        };
+      })
+    );
+
+    // TODO: Tally up votes, convert to scores
+    // TODO: Tally up scores (remember adhoc scores)
+  }
+
+  private computeFinalScoresForRound() {
+    const round = this.currentRound;
+    const finalScores = this.players.map((p) => {
+      const shirts = sumOfScores(round.shirtScores.filter((s) => s.shirt.createdBy === p.id));
+      const adhoc = sumOfScores(round.adhocScores.filter((s) => s.targetId === p.id));
+      return {
+        player: p,
+        score: shirts + adhoc,
+      };
+    });
+    round.finalScores = finalScores;
+  }
+
+  private computeAndBroadcastVotingResult = async () => {
+    const votingRound = last(this.currentRound.votingRounds)!;
+    const voteValue = Math.floor(1_000 / votingRound.length);
+
+    // Convert to scores:
+    votingRound.forEach((vote) => {
+      this.currentRound.adhocScores.push({
+        scorerId: vote.scorerId,
+        targetId: vote.voteFor.createdBy,
+        id: shortId('adhoc'),
+        reason: ADHOC_REASON.VOTE,
+        value: voteValue,
+      });
+    });
+
+    const running: VSVoteResult[] = [];
+    for (let i = 0; i < votingRound.length; i++) {
+      const vote = votingRound[i];
+      running.push({
+        voterName: this.players.find((p) => p.id === vote.scorerId)!.name,
+        scoreValue: voteValue,
+        forShirtId: vote.voteFor.id,
+      });
+      this.sendToAllPresenters({
+        type: 'pure-metadata',
+        metadata: {
+          vsVoteVotes: running,
+        },
+      });
+      await waitFor(0.5);
+    }
+  };
+
+  private makeAnnouncement = async (
+    options: { heading: string; subtext?: string; shirt?: Shirt },
+    pauseFor?: number
+  ) => {
+    this.sendStepToAllPresenters('announcement', {
+      announcementHeading: options.heading,
+      announcementSubtext: options.subtext || '',
+      announcementShirt: options.shirt || undefined,
+    });
+    if (pauseFor) {
+      await waitFor(pauseFor);
+    }
+  };
+
+  private explainAndWait = (
+    options: { heading: string; explainer: string; shirt?: Shirt },
+    explainAndWaitUpdater: () => { player: Player; status: number | string }[]
+  ) => {
+    const { heading, explainer, shirt = undefined } = options;
+    this.explainAndWaitUpdater = explainAndWaitUpdater;
+    this.sendStepToAllPresenters('explain-and-wait', {
+      explainText: {
+        heading,
+        explainer,
+        shirt,
+      },
+      explainStats: [],
+    });
+    this.updateExplainAndWait();
+  };
+
+  private updateExplainAndWait = () => {
+    if (!this.explainAndWaitUpdater) {
+      return;
+    }
+
+    this.sendToAllPresenters({
+      type: 'pure-metadata',
+      metadata: {
+        explainStats: this.explainAndWaitUpdater(),
+      },
+    });
+  };
+
+  private emitTimer(time: number) {
+    this.sendToAllPresenters({
+      type: 'timer',
+      metadata: {
+        time,
+      },
+    });
+  }
+
+  private async showScores(category: string, scores: ScoreInfo[]) {
+    this.sendStepToAllPresenters('show-scores', {
+      showScoresScores: scores,
+      showScoresCategory: category,
+    });
+    await waitFor(10);
   }
 
   private async collectVotesBetween(shirts: Shirt[]) {
@@ -89,6 +404,7 @@ export class TKO implements IGame {
     });
 
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       if (last(this.currentRound.votingRounds)!.length === targetVotes) {
         return;
@@ -97,23 +413,24 @@ export class TKO implements IGame {
   }
 
   private async collectScoresFor(shirt: Shirt, possibleScores: number[]) {
-    this.players
-      .filter((p) => p.id !== shirt.createdBy)
-      .forEach((p) => {
-        this.options.onCommunicate(p.id, {
-          type: 'score',
-          metadata: {
-            description: shirt.slogan.text,
-            shirtId: shirt.id,
-            possibleScores,
-          },
-        });
+    const scoringPlayers = this.players.filter((p) => p.id !== shirt.createdBy);
+
+    scoringPlayers.forEach((p) => {
+      this.options.onCommunicate(p.id, {
+        type: 'score',
+        metadata: {
+          description: shirt.slogan.text,
+          shirtId: shirt.id,
+          possibleScores,
+        },
       });
+    });
 
     // Everyone except the artist gets to score
-    const targetScoreCount = this.currentRound.shirtScores.length + (this.players.length - 1);
+    const targetScoreCount = this.currentRound.shirtScores.length + scoringPlayers.length;
 
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       if (this.currentRound.shirtScores.length === targetScoreCount) {
         return;
@@ -123,11 +440,12 @@ export class TKO implements IGame {
 
   private async collectDesigns() {
     const targetDesignCount = this.designs.length + this.players.length;
-    this.sendToAll({
+    this.sendToAllPlayers({
       type: 'design',
       metadata: {},
     });
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       // TODO: Emit timer to presenter
       if (this.designs.length === targetDesignCount) {
@@ -137,11 +455,12 @@ export class TKO implements IGame {
   }
 
   private async collectSlogans(targetSloganCount: number = Infinity) {
-    this.sendToAll({
+    this.sendToAllPlayers({
       type: 'slogan',
       metadata: {},
     });
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       // TODO: Emit timer to presenter
       if (this.slogans.length === targetSloganCount) {
@@ -182,6 +501,7 @@ export class TKO implements IGame {
 
     const targetShirts = this.currentRound.shirts.length + this.players.length;
     for (let i = 1; i <= 45; i++) {
+      this.emitTimer(45 - i);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       // TODO: Emit timer to presenter
       if (this.currentRound.shirts.length === targetShirts) {
@@ -190,7 +510,15 @@ export class TKO implements IGame {
     }
   }
 
-  input(command: IncomingCommand): OutgoingCommand {
+  private announceRound = async (roundNumber: number, roundName: string) => {
+    this.sendStepToAllPresenters('round', {
+      roundNumber,
+      roundName,
+    });
+    await waitFor(3);
+  };
+
+  input(command: IncomingCommand): OutgoingPlayerCommand {
     console.log(`[${this.gameCode}]: Received command: ${JSON.stringify(command)}`);
     if (command.type === 'design') {
       const design = new Design({
@@ -199,6 +527,7 @@ export class TKO implements IGame {
       });
       console.log(`Created design: ${JSON.stringify(design, null, 2)}`);
       this.designs.push(design);
+      this.updateExplainAndWait();
       return {
         type: 'wait',
         metadata: {},
@@ -211,6 +540,7 @@ export class TKO implements IGame {
       });
       console.log(`Created slogan: ${JSON.stringify(slogan, null, 2)}`);
       this.slogans.push(slogan);
+      this.updateExplainAndWait();
       return {
         type: 'slogan',
         metadata: {},
@@ -225,6 +555,7 @@ export class TKO implements IGame {
       });
       console.log(`Received shirt with design: '${designId}' and slogan '${sloganId}'.`);
       this.currentRound.shirts.push(shirt);
+      this.updateExplainAndWait();
       return {
         type: 'wait',
         metadata: {},
@@ -244,11 +575,13 @@ export class TKO implements IGame {
         scorerId: command.sourcePlayerId,
         targetId: shirt.design.createdBy,
         value: value / 2,
+        reason: ADHOC_REASON.DESIGN,
       });
       const sloganScore = new AdhocScore({
         scorerId: command.sourcePlayerId,
         targetId: shirt.slogan.createdBy,
         value: value / 2,
+        reason: ADHOC_REASON.SLOGAN,
       });
 
       console.log(`Registered a shirt score of '${shirtScore.value}' for '${shirtScore.shirt.createdBy}.`);
@@ -258,6 +591,8 @@ export class TKO implements IGame {
       this.currentRound.shirtScores.push(shirtScore);
       this.currentRound.adhocScores.push(designScore);
       this.currentRound.adhocScores.push(sloganScore);
+
+      this.updateExplainAndWait();
 
       return {
         type: 'wait',
@@ -271,6 +606,8 @@ export class TKO implements IGame {
         voteFor: this.currentRound.shirts.find((s) => s.id === targetId)!,
       });
       console.log(`Player '${vote.scorerId}' voted for '${vote.voteFor.id}'.`);
+      last(this.currentRound.votingRounds)!.push(vote);
+      this.updateExplainAndWait();
       return {
         type: 'wait',
         metadata: {},
@@ -280,46 +617,97 @@ export class TKO implements IGame {
     throw new Error('Girl, what?');
   }
 
-  private sendToAll(payload: OutgoingCommand) {
-    console.log(`[${this.gameCode}] Sending to all: ${JSON.stringify(payload)}`);
+  private sendToAllPlayers(payload: OutgoingPlayerCommand) {
+    console.log(`[${this.gameCode}] Sending to all players: ${JSON.stringify(payload)}`);
     this.players.forEach(({ id }) => {
+      this.options.onCommunicate(id, payload);
+    });
+  }
+
+  private sendStepToAllPresenters(step: PresenterCommandStep, metadata: PresenterCommandStepMetadata) {
+    this.sendToAllPresenters({
+      type: 'step',
+      metadata: {
+        step,
+        metadata,
+      },
+    });
+  }
+
+  private sendToAllPresenters(payload: OutgoingPresenterCommand) {
+    console.log(`[${this.gameCode}] Sending to all presenters: ${JSON.stringify(payload)}`);
+    this.presenters.forEach(({ id }) => {
       this.options.onCommunicate(id, payload);
     });
   }
 }
 
 export class SocketCommunicator {
-  playerIdToSocketId: { [key: string]: string } = {};
-  lastCommandSent: { [playerId: string]: OutgoingCommand } = {};
+  clientIdToSocketId: { [key: string]: string } = {};
+
+  playerLastCommandSent: { [playerId: string]: OutgoingPlayerCommand | OutgoingPresenterCommand } = {};
+  gamePresenterLastCommandSentPerType: { [gameCode: string]: { [key: string]: OutgoingPresenterCommand } } = {};
 
   constructor(private io: socketIo.Server) {}
 
-  register(playerId: string, socketId: string): void {
-    console.log(`[COMMS] Register '${playerId}' as ${socketId}'.`);
-    const existing = this.playerIdToSocketId[playerId];
+  register(clientId: string, socketId: string): void {
+    console.log(`[COMMS] Register '${clientId}' as ${socketId}'.`);
+    const existing = this.clientIdToSocketId[clientId];
     if (existing) {
       // TODO: Close / destroy existing socket.
     }
-    this.playerIdToSocketId[playerId] = socketId;
-    // Catchup a player in case the game is already ongoing and they reconnected
-    this.catchup(playerId);
+    this.clientIdToSocketId[clientId] = socketId;
+    // Catchup a player / presenter in case the game is already ongoing and they reconnected
+    if (Player.isPlayerId(clientId)) {
+      this.playerCatchup(clientId);
+    } else if (Presenter.isPresenterId(clientId)) {
+      this.presenterCatchup(clientId);
+    }
   }
 
-  send(playerId: string, payload: OutgoingCommand) {
-    this.lastCommandSent[playerId] = payload;
-    const socketId = this.playerIdToSocketId[playerId];
+  send(clientId: string, payload: OutgoingPlayerCommand | OutgoingPresenterCommand) {
+    if (Player.isPlayerId(clientId)) {
+      this.playerLastCommandSent[clientId] = payload;
+    } else if (Presenter.isPresenterId(clientId)) {
+      const gameCode = Presenter.gameCodeFromId(clientId);
+      if (!this.gamePresenterLastCommandSentPerType[gameCode]) {
+        this.gamePresenterLastCommandSentPerType[gameCode] = {};
+      }
+      this.gamePresenterLastCommandSentPerType[gameCode][payload.type] = payload as OutgoingPresenterCommand;
+    }
+
+    const socketId = this.clientIdToSocketId[clientId];
     if (!socketId) {
-      console.log(`[COMMS] WARNING! No socket found for player: '${playerId}'.`);
+      console.log(`[COMMS] WARNING! No socket found for client: '${clientId}'.`);
       return;
     }
     this.io.to(socketId).emit(SOCKET_EVENTS.COMMAND, payload);
   }
 
-  catchup(playerId: string) {
+  playerCatchup(clientId: string) {
     // Resend the last command we sent to player
-    const command = this.lastCommandSent[playerId];
+    const command = this.playerLastCommandSent[clientId];
     if (command) {
-      this.send(playerId, command);
+      this.send(clientId, command);
     }
   }
+
+  presenterCatchup(clientId: string) {
+    // Resend the last of every type of command to the presenter
+    const gameCode = Presenter.gameCodeFromId(clientId);
+    Object.values(this.gamePresenterLastCommandSentPerType[gameCode] || {}).forEach((v) => {
+      this.send(clientId, v);
+    });
+  }
 }
+
+export const waitFor = async (second: number) => {
+  await new Promise((resolve) => setTimeout(resolve, second * 1000));
+};
+
+// TODO: Standardize with where these IDs are generated
+
+const inspirations = ['Do it for glory!', 'Go for gold!', 'Be simply the best!'];
+const sumOfScores = (scores: { value: number }[]) => {
+  return scores.reduce((memo, x) => memo + x.value, 0);
+};

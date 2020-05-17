@@ -1,0 +1,29 @@
+.jcp-announcement {
+  width: 50%;
+  height: 40%;
+  overflow-y: auto;
+  padding: 48px;
+
+  display: flex;
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  background-color: white;
+  border: 1px solid lightgray;
+  border-radius: 2px;
+
+  > * {
+    margin-bottom: 12px;
+  }
+
+  .jcp-heading {
+    font-size: 32px !important;
+  }
+
+  &__subtext {
+    font-size: 18px;
+    font-weight: bold;
+  }
+}
