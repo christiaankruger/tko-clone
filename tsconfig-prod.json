@@ -6,11 +6,13 @@
     "noImplicitAny": false,
     "esModuleInterop": true,
     "jsx": "react",
+    "skipLibCheck": true,
 
     /* Advanced Options */
     "forceConsistentCasingInFileNames": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "strictNullChecks": false
-  }
+  },
+  "include": ["./server/**/*"]
 }

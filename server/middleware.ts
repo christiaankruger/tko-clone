@@ -30,19 +30,35 @@ const OrderedMiddleware: MiddlewareType[] = [
   },
   // Static file server
   async (ctx, next) => {
+    const PROJECT_ROOT = process.cwd();
+
     if (ctx.path === '/') {
       return send(ctx, '/index.html', {
-        root: path.resolve(__dirname, '..', 'dist'),
+        root: path.resolve(PROJECT_ROOT, 'dist-remote'),
+      });
+    }
+
+    if (ctx.path === '/watch') {
+      return send(ctx, '/index.html', {
+        root: path.resolve(PROJECT_ROOT, 'dist-presenter'),
       });
     }
 
     // KLUDGE: + because sometimes a dist/dist sneaks in. FIXME PLEASE
     // DOUBLE KLUDGE: Seems to be inconsistent?
-    const distCheckerRegex = /^(\/?dist\/)+/;
-    if (distCheckerRegex.test(ctx.path)) {
-      const relativePath = ctx.path.replace(distCheckerRegex, '');
+    const distRemoteCheckerRegex = /^(\/?dist-remote\/)+/;
+    if (distRemoteCheckerRegex.test(ctx.path)) {
+      const relativePath = ctx.path.replace(distRemoteCheckerRegex, '');
       return send(ctx, relativePath, {
-        root: path.resolve(__dirname, '..', 'dist'),
+        root: path.resolve(PROJECT_ROOT, 'dist-remote'),
+      });
+    }
+
+    const distPresenterCheckerRegex = /^(\/?dist-presenter\/)+/;
+    if (distPresenterCheckerRegex.test(ctx.path)) {
+      const relativePath = ctx.path.replace(distPresenterCheckerRegex, '');
+      return send(ctx, relativePath, {
+        root: path.resolve(PROJECT_ROOT, 'dist-presenter'),
       });
     }
 

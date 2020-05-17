@@ -16,6 +16,8 @@ import {
 import { IGame } from './Games/Game';
 import { blue, blueBright, yellowBright } from 'chalk';
 
+console.log('CWD IS ' + process.cwd());
+
 const env = {
   port: process.env.PORT || 7024,
 };
