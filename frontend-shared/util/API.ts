@@ -1,6 +1,6 @@
 import Axios from 'axios';
 
-const ROOT = 'http://localhost:7024';
+const ROOT = '';
 
 /**
  * e.g. Post('/join');

@@ -22,7 +22,7 @@ import { Score } from './Components/Score/Score';
 import { Vote } from './Components/Vote/Vote';
 import { Post } from '../../frontend-shared/util/API';
 
-const socket = SocketIO('http://localhost:7024');
+const socket = SocketIO();
 const store = new Store();
 
 (window as any).socket = socket;

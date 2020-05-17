@@ -19,7 +19,7 @@ import { Announcement } from './Components/Announcement/Announcement';
 import { VSVote } from './Components/VSVote/VSVote';
 import { ShowScores } from './Components/ShowScores/ShowScores';
 
-const socket = SocketIO('http://localhost:7024');
+const socket = SocketIO();
 const store = new Store();
 
 (window as any).socket = socket;
