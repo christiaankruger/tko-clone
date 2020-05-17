@@ -30,15 +30,17 @@ const OrderedMiddleware: MiddlewareType[] = [
   },
   // Static file server
   async (ctx, next) => {
+    const PROJECT_ROOT = process.cwd();
+
     if (ctx.path === '/') {
       return send(ctx, '/index.html', {
-        root: path.resolve(__dirname, '..', 'dist-remote'),
+        root: path.resolve(PROJECT_ROOT, 'dist-remote'),
       });
     }
 
     if (ctx.path === '/watch') {
       return send(ctx, '/index.html', {
-        root: path.resolve(__dirname, '..', 'dist-presenter'),
+        root: path.resolve(PROJECT_ROOT, 'dist-presenter'),
       });
     }
 
@@ -48,7 +50,7 @@ const OrderedMiddleware: MiddlewareType[] = [
     if (distRemoteCheckerRegex.test(ctx.path)) {
       const relativePath = ctx.path.replace(distRemoteCheckerRegex, '');
       return send(ctx, relativePath, {
-        root: path.resolve(__dirname, '..', 'dist-remote'),
+        root: path.resolve(PROJECT_ROOT, 'dist-remote'),
       });
     }
 
@@ -56,7 +58,7 @@ const OrderedMiddleware: MiddlewareType[] = [
     if (distPresenterCheckerRegex.test(ctx.path)) {
       const relativePath = ctx.path.replace(distPresenterCheckerRegex, '');
       return send(ctx, relativePath, {
-        root: path.resolve(__dirname, '..', 'dist-presenter'),
+        root: path.resolve(PROJECT_ROOT, 'dist-presenter'),
       });
     }
 

@@ -10,7 +10,7 @@
     "start": "node dist/server/index.js",
     "serve-remote": "parcel remote/src/index.html --port 6555 --out-dir dist-remote",
     "serve-presenter": "parcel presenter/src/index.html --port 5555 --out-dir dist-presenter",
-    "build:server": "tsc --skipLibCheck --outDir dist/",
+    "build:server": "tsc --p tsconfig-prod.json --skipLibCheck --outDir dist/",
     "build:remote": "parcel build remote/src/index.html --out-dir dist-remote --public-url ./dist-remote/",
     "build:presenter": "parcel build presenter/src/index.html --out-dir dist-presenter --public-url ./dist-presenter/",
     "build": "(yarn run build:server) && (yarn run build:remote) && (yarn run build:presenter)"
