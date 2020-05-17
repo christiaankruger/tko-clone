@@ -29,6 +29,10 @@ export enum ADHOC_REASON {
   VOTE = 'vote',
 }
 
+type ScoreAndVoteCeremoniesOptions = {
+  possibleScores: number[];
+};
+
 export class TKO implements IGame {
   gameCode: string = generateRoomCode();
 
@@ -36,9 +40,13 @@ export class TKO implements IGame {
   presenters: Presenter[] = [];
   designs: Design[] = [];
   slogans: Slogan[] = [];
+  previousRounds: Round[] = [];
 
   currentRound: Round = new Round();
   gameType: GameType = 'tko';
+
+  designAndAssetBonusesEnabled: boolean = true;
+  repeatCollectSlogan: boolean = true;
 
   explainAndWaitUpdater?: () => { player: Player; status: number | string }[];
 
@@ -141,6 +149,100 @@ export class TKO implements IGame {
       }
     );
     await this.collectShirts(this.designs, this.slogans);
+
+    await this.scoreAndVoteCeremonies({
+      possibleScores: [100, 200, 300, 400, 500],
+    });
+
+    // Round 2
+    this.newRound();
+    await this.announceRound(2, 'Levelling up');
+    this.designAndAssetBonusesEnabled = false; // No adhoc bonus scores for this round
+
+    await this.makeAnnouncement(
+      {
+        heading: 'Give us a design!',
+        subtext: "We'll pick a random one, and everyone has to provide a slogan for it.",
+      },
+      5
+    );
+
+    this.explainAndWait(
+      {
+        heading: "Let's draw some shirts!",
+        explainer: `Draw another shirt! ${sample(
+          inspirations
+        )} We'll pick a random one, and everyone has to provide a slogan for it.`,
+      },
+      () => {
+        // Compute new
+        return this.players.map((player) => {
+          const count = this.designs.filter((d) => d.createdBy === player.id).length;
+          return {
+            player,
+            status: count,
+          };
+        });
+      }
+    );
+
+    await this.collectDesigns();
+    const luckyDesign = sample(this.designs);
+    const luckyShirt = new Shirt({
+      createdBy: 'SYSTEM',
+      design: luckyDesign,
+      slogan: {
+        createdBy: 'SYSTEM',
+        id: 'SYSTEM',
+        text: 'Your slogan here',
+      },
+    });
+
+    this.explainAndWait(
+      {
+        heading: 'Write a slogan for this shirt',
+        explainer: 'Outwit your opponents, you can do it!',
+        shirt: luckyShirt,
+      },
+      () => {
+        return this.players.map((player) => {
+          const count = this.slogans.filter((d) => d.createdBy === player.id).length;
+          return {
+            player,
+            status: count,
+          };
+        });
+      }
+    );
+    this.repeatCollectSlogan = false;
+    await this.collectSlogans(this.players.length);
+
+    // Make shirts for these people (only for those who submitted slogans)
+    this.currentRound.shirts = this.slogans.map((slogan) => {
+      return new Shirt({
+        createdBy: slogan.createdBy,
+        slogan,
+        design: luckyDesign,
+      });
+    });
+
+    await this.scoreAndVoteCeremonies({
+      possibleScores: [200, 400, 600, 800, 1000],
+    });
+  }
+
+  private newRound() {
+    this.previousRounds.push(this.currentRound);
+    this.currentRound = new Round();
+    this.designs = [];
+    this.slogans = [];
+
+    // Defaults
+    this.designAndAssetBonusesEnabled = true;
+    this.repeatCollectSlogan = true;
+  }
+
+  private scoreAndVoteCeremonies = async (options: ScoreAndVoteCeremoniesOptions) => {
     await this.makeAnnouncement(
       {
         heading: 'Time to award some points',
@@ -149,6 +251,9 @@ export class TKO implements IGame {
       },
       5
     );
+
+    // In case someone keeps a keen eye
+    this.currentRound.shirts = shuffle(this.currentRound.shirts);
 
     for (let i = 0; i < this.currentRound.shirts.length; i++) {
       this.sendToAllPlayers({ type: 'wait', metadata: {} });
@@ -171,7 +276,7 @@ export class TKO implements IGame {
         }
       );
 
-      await this.collectScoresFor(shirt, [100, 200, 300, 400, 500]);
+      await this.collectScoresFor(shirt, options.possibleScores);
     }
 
     const allScores = this.currentRound.shirts
@@ -243,29 +348,33 @@ export class TKO implements IGame {
     });
     await this.showScores('Shirt scores', shirtScores);
 
-    const sloganScores = this.players.map((p) => {
-      const value = this.currentRound.adhocScores
-        .filter((s) => s.reason === ADHOC_REASON.SLOGAN && s.targetId === p.id)
-        .reduce((memo, x) => memo + x.value, 0);
-      return {
-        name: p.name,
-        value,
-      } as ScoreInfo;
-    });
-    await this.showScores('Slogan bonuses', sloganScores);
-    const designScores = this.players.map((p) => {
-      const value = this.currentRound.adhocScores
-        .filter((s) => s.reason === ADHOC_REASON.DESIGN && s.targetId === p.id)
-        .reduce((memo, x) => memo + x.value, 0);
-      return {
-        name: p.name,
-        value,
-      } as ScoreInfo;
-    });
-    await this.showScores('Design bonuses', designScores);
+    if (this.designAndAssetBonusesEnabled) {
+      const sloganScores = this.players.map((p) => {
+        const value = this.currentRound.adhocScores
+          .filter((s) => s.reason === ADHOC_REASON.SLOGAN && s.targetId === p.id)
+          .reduce((memo, x) => memo + x.value, 0);
+        return {
+          name: p.name,
+          value,
+        } as ScoreInfo;
+      });
+      await this.showScores('Slogan bonuses', sloganScores);
+      const designScores = this.players.map((p) => {
+        const value = this.currentRound.adhocScores
+          .filter((s) => s.reason === ADHOC_REASON.DESIGN && s.targetId === p.id)
+          .reduce((memo, x) => memo + x.value, 0);
+        return {
+          name: p.name,
+          value,
+        } as ScoreInfo;
+      });
+      await this.showScores('Design bonuses', designScores);
+    }
+
     this.computeFinalScoresForRound();
+    await this.makeAnnouncement({ heading: 'Drum roll, please...' }, 3);
     await this.showScores(
-      'Final scores for round 1',
+      'End of round',
       this.currentRound.finalScores.map((s) => {
         return {
           name: s.player.name,
@@ -273,10 +382,7 @@ export class TKO implements IGame {
         };
       })
     );
-
-    // TODO: Tally up votes, convert to scores
-    // TODO: Tally up scores (remember adhoc scores)
-  }
+  };
 
   private computeFinalScoresForRound() {
     const round = this.currentRound;
@@ -541,10 +647,17 @@ export class TKO implements IGame {
       console.log(`Created slogan: ${JSON.stringify(slogan, null, 2)}`);
       this.slogans.push(slogan);
       this.updateExplainAndWait();
-      return {
-        type: 'slogan',
-        metadata: {},
-      };
+      if (this.repeatCollectSlogan) {
+        return {
+          type: 'slogan',
+          metadata: {},
+        };
+      } else {
+        return {
+          type: 'wait',
+          metadata: {},
+        };
+      }
     }
     if (command.type === 'shirt') {
       const { designId, sloganId } = command.metadata;
@@ -571,26 +684,29 @@ export class TKO implements IGame {
         value,
       });
       // Register adhoc score
-      const designScore = new AdhocScore({
-        scorerId: command.sourcePlayerId,
-        targetId: shirt.design.createdBy,
-        value: value / 2,
-        reason: ADHOC_REASON.DESIGN,
-      });
-      const sloganScore = new AdhocScore({
-        scorerId: command.sourcePlayerId,
-        targetId: shirt.slogan.createdBy,
-        value: value / 2,
-        reason: ADHOC_REASON.SLOGAN,
-      });
+      if (this.designAndAssetBonusesEnabled) {
+        const designScore = new AdhocScore({
+          scorerId: command.sourcePlayerId,
+          targetId: shirt.design.createdBy,
+          value: value / 2,
+          reason: ADHOC_REASON.DESIGN,
+        });
+        const sloganScore = new AdhocScore({
+          scorerId: command.sourcePlayerId,
+          targetId: shirt.slogan.createdBy,
+          value: value / 2,
+          reason: ADHOC_REASON.SLOGAN,
+        });
+
+        console.log(`Registered a design score of '${designScore.value}' for '${designScore.targetId}.`);
+        console.log(`Registered a slogan score of '${sloganScore.value}' for '${sloganScore.targetId}.`);
+        this.currentRound.adhocScores.push(designScore);
+        this.currentRound.adhocScores.push(sloganScore);
+      }
 
       console.log(`Registered a shirt score of '${shirtScore.value}' for '${shirtScore.shirt.createdBy}.`);
-      console.log(`Registered a design score of '${designScore.value}' for '${designScore.targetId}.`);
-      console.log(`Registered a slogan score of '${sloganScore.value}' for '${sloganScore.targetId}.`);
 
       this.currentRound.shirtScores.push(shirtScore);
-      this.currentRound.adhocScores.push(designScore);
-      this.currentRound.adhocScores.push(sloganScore);
 
       this.updateExplainAndWait();
 
