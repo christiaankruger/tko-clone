@@ -1,7 +1,6 @@
 import React, { FC } from 'react';
 import ShirtPng from '../../../../remote/assets/shirt.png';
 import { Shirt } from '../../../../server/Games/TKOMechanics';
-import { Badge } from '@material-ui/core';
 
 export interface ShirtDisplayProps {
   shirt: Shirt;

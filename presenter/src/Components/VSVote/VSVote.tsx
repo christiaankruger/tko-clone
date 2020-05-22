@@ -4,10 +4,10 @@ import './VSVote.scss';
 import { Heading } from '../shared/Heading';
 import { Shirt } from '../../../../server/Games/TKOMechanics';
 import { ShirtDisplay } from '../shared/ShirtDisplay';
-import { observable, computed } from 'mobx';
+import { computed } from 'mobx';
 import { observer } from 'mobx-react';
-import { Chip, Avatar } from '@material-ui/core';
-import { FiCheck } from 'react-icons/fi';
+import { FiCheck } from 'react-icons/fi/index.esm';
+import { Avatar, Chip } from '@material-ui/core';
 
 const BEM = createBemHelper('vs-vote');
 

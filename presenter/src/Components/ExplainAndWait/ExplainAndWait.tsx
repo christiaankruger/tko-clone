@@ -3,10 +3,10 @@ import { createBemHelper } from '../../util/BEM';
 import './ExplainAndWait.scss';
 import { Player } from '../../../../server/Games/Game';
 import { Heading } from '../shared/Heading';
-import { List, ListItem, ListItemText, Chip } from '@material-ui/core';
 import { Shirt } from '../../../../server/Games/TKOMechanics';
 import { ShirtDisplay } from '../shared/ShirtDisplay';
 import { observer } from 'mobx-react';
+import { List, ListItem, ListItemText, Chip } from '@material-ui/core';
 
 const BEM = createBemHelper('explain-and-wait');
 

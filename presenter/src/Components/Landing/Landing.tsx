@@ -2,11 +2,9 @@ import React, { Component } from 'react';
 import { createBemHelper } from '../../util/BEM';
 import './Landing.scss';
 import { Heading } from '../shared/Heading';
-import Button from '@material-ui/core/Button';
-import TextField from '@material-ui/core/TextField';
-import Link from '@material-ui/core/Link';
 import { observable, action } from 'mobx';
 import { observer } from 'mobx-react';
+import { TextField, Button, Link } from '@material-ui/core';
 
 const BEM = createBemHelper('landing');
 
