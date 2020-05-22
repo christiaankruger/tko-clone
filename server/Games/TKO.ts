@@ -89,7 +89,7 @@ export class TKO implements IGame {
 
   async orchestrate() {
     // Round 1
-    const ROUND_1_DESIGNS = 2;
+    const ROUND_1_DESIGNS = 3;
     await this.announceRound(1, 'The Drawening');
     this.explainAndWait(
       {
@@ -229,7 +229,30 @@ export class TKO implements IGame {
     await this.scoreAndVoteCeremonies({
       possibleScores: [200, 400, 600, 800, 1000],
     });
+
+    const overallScores = this.computeOverallScores();
+
+    await this.showScores(
+      'Where we are so far',
+      overallScores.map(({ player, value }) => {
+        return {
+          name: player.name,
+          value,
+        };
+      })
+    );
   }
+
+  private computeOverallScores = () => {
+    return [this.currentRound, ...this.previousRounds]
+      .reduce((memo, round) => {
+        round.finalScores.forEach((scoreInfo) => {
+          memo.find((i) => i.player.id === scoreInfo.player.id)!.value += scoreInfo.score;
+        });
+        return memo;
+      }, this.players.map((player) => ({ player, value: 0 })) as { player: Player; value: number }[])
+      .sort((a, b) => b.value - a.value);
+  };
 
   private newRound() {
     this.previousRounds.push(this.currentRound);
@@ -311,7 +334,31 @@ export class TKO implements IGame {
       );
     }
 
+    // const topThree = take(3)(allScores);
+    // let topTwo: {
+    //   shirt: Shirt;
+    //   score: number;
+    // }[];
+    // if (topThree[1].score === topThree[2]?.score) {
+    //   // We have a tie here. Resolve tie with other scores
+    //   const candidates = [topThree[1], topThree[2]];
+    //   candidates.forEach((candidate) => {
+    //     const extra = this.currentRound.adhocScores
+    //       .filter((s) => s.targetId === candidate.shirt.createdBy)
+    //       .reduce((memo, x) => {
+    //         return memo + x.value;
+    //       }, 0);
+    //     candidate.score += extra;
+    //   });
+    //   const best = candidates[0].score < candidates[1].score ? candidates[0] : candidates[1];
+    //   topTwo = [topThree[0], best];
+    // } else {
+    //   // No issue
+    //   topTwo = shuffle(take(2)(topThree));
+    // }
+
     const topTwo = shuffle(take(2)(allScores));
+
     console.log(
       `[${this.gameCode}]: Voting happens between: ${JSON.stringify(
         topTwo.map((t) => ({ shirtId: t.shirt.id, score: t.score }))

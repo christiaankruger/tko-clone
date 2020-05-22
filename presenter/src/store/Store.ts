@@ -60,6 +60,10 @@ export class Store {
         // Explicitly clear what we don't re-set. // Find better way to do this.
         const { announcementHeading, announcementSubtext, announcementShirt } = stepData.metadata;
         Object.assign(this.metadata, { announcementHeading, announcementSubtext, announcementShirt });
+      } else if (step === 'vs-vote') {
+        // Explicitly clear what we don't re-set. // Find better way to do this.
+        const { vsVoteVotes, vsVoteContenders } = stepData.metadata;
+        Object.assign(this.metadata, { vsVoteContenders, vsVoteVotes });
       } else {
         Object.assign(this.metadata, stepData.metadata);
       }
