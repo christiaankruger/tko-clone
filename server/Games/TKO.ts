@@ -1,21 +1,18 @@
 import { v4 } from 'uuid';
 import {
-  IncomingCommand,
   OutgoingPlayerCommand,
   SOCKET_EVENTS,
   GameType,
   OutgoingPresenterCommand,
-  PresenterCommandStep,
-  PresenterCommandStepMetadata,
-  PresenterCommandType,
   VSVoteResult,
   ScoreInfo,
 } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
 import { Player, IGame, Presenter } from './Game';
 import { Design, Slogan, Round, Shirt, ShirtScore, AdhocScore, shortId, Vote } from './TKOMechanics';
-import { generateRoomCode, shuffle, sample } from '../util';
-import { take, pipe, compose, filter, last } from 'ramda';
+import { shuffle, sample } from '../util';
+import { take, last } from 'ramda';
+import { BaseGame } from './BaseGame';
 
 export interface TKOProps {
   onCommunicate: OnCommunicateType;
@@ -31,61 +28,18 @@ export enum ADHOC_REASON {
 
 type ScoreAndVoteCeremoniesOptions = {
   possibleScores: number[];
+  adHocBonusesEnabled: boolean;
 };
 
-export class TKO implements IGame {
-  gameCode: string = generateRoomCode();
+const DEFAULT_WAITING_TIME = 90; // seconds
 
-  players: Player[] = [];
-  presenters: Presenter[] = [];
+export class TKO extends BaseGame {
   designs: Design[] = [];
   slogans: Slogan[] = [];
   previousRounds: Round[] = [];
 
   currentRound: Round = new Round();
   gameType: GameType = 'tko';
-
-  designAndAssetBonusesEnabled: boolean = true;
-  repeatCollectSlogan: boolean = true;
-
-  explainAndWaitUpdater?: () => { player: Player; status: number | string }[];
-
-  constructor(private options: TKOProps) {}
-
-  addPlayer(name: string): Player {
-    const player = new Player({
-      id: Player.generateId(this.gameCode, name),
-      name,
-    });
-
-    this.players.push(player);
-
-    this.sendToAllPresenters({
-      type: 'all-players',
-      metadata: {
-        players: this.players,
-      },
-    });
-
-    return player;
-  }
-
-  addPresenter(isCreator: boolean = false): Presenter {
-    const presenter = new Presenter({
-      id: Presenter.generateId(this.gameCode),
-      isCreator,
-    });
-    this.presenters.push(presenter);
-    return presenter;
-  }
-
-  hasPlayerId(playerId: string): boolean {
-    return !!this.players.find((p) => p.id === playerId);
-  }
-
-  playerByName(name: string): Player | undefined {
-    return this.players.find((p) => p.name === name);
-  }
 
   async orchestrate() {
     // Round 1
@@ -152,12 +106,12 @@ export class TKO implements IGame {
 
     await this.scoreAndVoteCeremonies({
       possibleScores: [100, 200, 300, 400, 500],
+      adHocBonusesEnabled: true,
     });
 
     // Round 2
     this.newRound();
     await this.announceRound(2, 'Levelling up');
-    this.designAndAssetBonusesEnabled = false; // No adhoc bonus scores for this round
 
     await this.makeAnnouncement(
       {
@@ -214,8 +168,7 @@ export class TKO implements IGame {
         });
       }
     );
-    this.repeatCollectSlogan = false;
-    await this.collectSlogans(this.players.length);
+    await this.collectSlogans('single');
 
     // Make shirts for these people (only for those who submitted slogans)
     this.currentRound.shirts = this.slogans.map((slogan) => {
@@ -228,6 +181,7 @@ export class TKO implements IGame {
 
     await this.scoreAndVoteCeremonies({
       possibleScores: [200, 400, 600, 800, 1000],
+      adHocBonusesEnabled: false,
     });
 
     const overallScores = this.computeOverallScores();
@@ -259,10 +213,6 @@ export class TKO implements IGame {
     this.currentRound = new Round();
     this.designs = [];
     this.slogans = [];
-
-    // Defaults
-    this.designAndAssetBonusesEnabled = true;
-    this.repeatCollectSlogan = true;
   }
 
   private scoreAndVoteCeremonies = async (options: ScoreAndVoteCeremoniesOptions) => {
@@ -299,7 +249,7 @@ export class TKO implements IGame {
         }
       );
 
-      await this.collectScoresFor(shirt, options.possibleScores);
+      await this.collectScoresFor(shirt, options.possibleScores, options.adHocBonusesEnabled);
     }
 
     const allScores = this.currentRound.shirts
@@ -395,7 +345,10 @@ export class TKO implements IGame {
     });
     await this.showScores('Shirt scores', shirtScores);
 
-    if (this.designAndAssetBonusesEnabled) {
+    if (
+      // TODO: Better
+      this.currentRound.adhocScores.find((s) => s.reason === ADHOC_REASON.SLOGAN || s.reason === ADHOC_REASON.DESIGN)
+    ) {
       const sloganScores = this.players.map((p) => {
         const value = this.currentRound.adhocScores
           .filter((s) => s.reason === ADHOC_REASON.SLOGAN && s.targetId === p.id)
@@ -491,36 +444,6 @@ export class TKO implements IGame {
     }
   };
 
-  private explainAndWait = (
-    options: { heading: string; explainer: string; shirt?: Shirt },
-    explainAndWaitUpdater: () => { player: Player; status: number | string }[]
-  ) => {
-    const { heading, explainer, shirt = undefined } = options;
-    this.explainAndWaitUpdater = explainAndWaitUpdater;
-    this.sendStepToAllPresenters('explain-and-wait', {
-      explainText: {
-        heading,
-        explainer,
-        shirt,
-      },
-      explainStats: [],
-    });
-    this.updateExplainAndWait();
-  };
-
-  private updateExplainAndWait = () => {
-    if (!this.explainAndWaitUpdater) {
-      return;
-    }
-
-    this.sendToAllPresenters({
-      type: 'pure-metadata',
-      metadata: {
-        explainStats: this.explainAndWaitUpdater(),
-      },
-    });
-  };
-
   private emitTimer(time: number) {
     this.sendToAllPresenters({
       type: 'timer',
@@ -545,122 +468,203 @@ export class TKO implements IGame {
     const playerIdsOfShirts = shirts.map((s) => s.createdBy);
     const votingPlayers = this.players.filter(({ id }) => !playerIdsOfShirts.includes(id));
 
-    // 0 since we initialized to an empty array up ^
-    const targetVotes = 0 + votingPlayers.length;
-    votingPlayers.forEach(({ id }) => {
-      this.options.onCommunicate(id, {
+    const [end, hasEnded] = this.requestInput(
+      () => votingPlayers,
+      () => ({
         type: 'vote',
         metadata: {
           between: shirts.map((s) => ({ description: s.slogan.text, id: s.id })),
         },
-      });
-    });
-
-    for (let i = 1; i <= 45; i++) {
-      this.emitTimer(45 - i);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      if (last(this.currentRound.votingRounds)!.length === targetVotes) {
-        return;
+      }),
+      (player, response, allResponses) => {
+        const { targetId } = response.metadata;
+        const vote = new Vote({
+          scorerId: response.sourcePlayerId,
+          voteFor: this.currentRound.shirts.find((s) => s.id === targetId)!,
+        });
+        console.log(`Player '${vote.scorerId}' voted for '${vote.voteFor.id}'.`);
+        last(this.currentRound.votingRounds)!.push(vote);
+        if (allResponses.length === votingPlayers.length) {
+          end();
+        }
+        return {
+          type: 'wait',
+          metadata: {},
+        };
       }
-    }
+    );
+
+    await this.defaultTurnTimer(hasEnded, end);
   }
 
-  private async collectScoresFor(shirt: Shirt, possibleScores: number[]) {
+  private async collectScoresFor(shirt: Shirt, possibleScores: number[], adhocBonuses: boolean = true) {
     const scoringPlayers = this.players.filter((p) => p.id !== shirt.createdBy);
 
-    scoringPlayers.forEach((p) => {
-      this.options.onCommunicate(p.id, {
+    const [end, hasEnded] = this.requestInput(
+      () => scoringPlayers,
+      () => ({
         type: 'score',
         metadata: {
           description: shirt.slogan.text,
           shirtId: shirt.id,
           possibleScores,
         },
-      });
-    });
+      }),
+      (player, response, allResponses) => {
+        const { shirtId, value } = response.metadata;
+        const shirt = this.currentRound.shirts.find((s) => s.id === shirtId)!;
+        // Register shirt score
+        const shirtScore = new ShirtScore({
+          scorerId: response.sourcePlayerId,
+          shirt,
+          value,
+        });
+        // Register adhoc score if applicable
+        if (adhocBonuses) {
+          const designScore = new AdhocScore({
+            scorerId: response.sourcePlayerId,
+            targetId: shirt.design.createdBy,
+            value: value / 2,
+            reason: ADHOC_REASON.DESIGN,
+          });
+          const sloganScore = new AdhocScore({
+            scorerId: response.sourcePlayerId,
+            targetId: shirt.slogan.createdBy,
+            value: value / 2,
+            reason: ADHOC_REASON.SLOGAN,
+          });
 
-    // Everyone except the artist gets to score
-    const targetScoreCount = this.currentRound.shirtScores.length + scoringPlayers.length;
+          console.log(`Registered a design score of '${designScore.value}' for '${designScore.targetId}.`);
+          console.log(`Registered a slogan score of '${sloganScore.value}' for '${sloganScore.targetId}.`);
+          this.currentRound.adhocScores.push(designScore);
+          this.currentRound.adhocScores.push(sloganScore);
+        }
 
-    for (let i = 1; i <= 45; i++) {
-      this.emitTimer(45 - i);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      if (this.currentRound.shirtScores.length === targetScoreCount) {
-        return;
+        console.log(`Registered a shirt score of '${shirtScore.value}' for '${shirtScore.shirt.createdBy}.`);
+
+        this.currentRound.shirtScores.push(shirtScore);
+        if (allResponses.length === scoringPlayers.length) {
+          end();
+        }
+        return {
+          type: 'wait',
+          metadata: {},
+        };
       }
-    }
+    );
+
+    await this.defaultTurnTimer(hasEnded, end);
   }
 
   private async collectDesigns() {
-    const targetDesignCount = this.designs.length + this.players.length;
-    this.sendToAllPlayers({
-      type: 'design',
-      metadata: {},
-    });
-    for (let i = 1; i <= 45; i++) {
-      this.emitTimer(45 - i);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      // TODO: Emit timer to presenter
-      if (this.designs.length === targetDesignCount) {
-        return;
+    const [end, hasEnded] = this.requestInput(
+      () => 'all',
+      () => ({ type: 'design', metadata: {} }),
+      (player, response, allResponses) => {
+        const design = new Design({
+          createdBy: response.sourcePlayerId,
+          base64: response.metadata.base64,
+        });
+        console.log(`Created design: ${JSON.stringify(design, null, 2)}`);
+        this.designs.push(design);
+
+        if (allResponses.length === this.players.length) {
+          end();
+        }
+        return { type: 'wait', metadata: {} };
       }
-    }
+    );
+
+    await this.defaultTurnTimer(hasEnded, end);
   }
 
-  private async collectSlogans(targetSloganCount: number = Infinity) {
-    this.sendToAllPlayers({
-      type: 'slogan',
-      metadata: {},
-    });
-    for (let i = 1; i <= 45; i++) {
-      this.emitTimer(45 - i);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      // TODO: Emit timer to presenter
-      if (this.slogans.length === targetSloganCount) {
+  private async collectSlogans(type: 'infinite' | 'single' = 'infinite') {
+    const [end, hasEnded] = this.requestInput(
+      () => 'all',
+      () => ({ type: 'slogan', metadata: {} }),
+      (player, response, allResponses) => {
+        const slogan = new Slogan({
+          createdBy: response.sourcePlayerId,
+          text: response.metadata.text,
+        });
+        console.log(`Created slogan: ${JSON.stringify(slogan, null, 2)}`);
+        this.slogans.push(slogan);
+
+        if (type === 'single') {
+          if (allResponses.length === this.players.length) {
+            end();
+          }
+          return { type: 'wait', metadata: {} };
+        }
+
+        // Type === 'infinite'
+        return { type: 'slogan', metadata: {} };
+      }
+    );
+    await this.defaultTurnTimer(hasEnded, end);
+  }
+
+  private defaultTurnTimer = async (hasEnded: () => boolean, end: () => boolean) => {
+    for (let i = 0; i < DEFAULT_WAITING_TIME; i++) {
+      this.emitTimer(DEFAULT_WAITING_TIME - i);
+      await waitFor(1);
+      if (hasEnded()) {
         return;
       }
     }
-  }
+    end();
+  };
 
   private async collectShirts(designs: Design[], slogans: Slogan[]) {
     const used: { [id: string]: boolean } = {};
     const takeDesigns = take(designs.length / this.players.length);
     const takeSlogans = take(slogans.length / this.players.length);
 
-    this.players.forEach(({ id }) => {
-      const designsForMe = takeDesigns(
-        shuffle(designs)
-          .filter((v) => v.createdBy !== id)
-          .filter((v) => !used[v.id])
-      );
-      const slogansForMe = takeSlogans(
-        shuffle(slogans)
-          .filter((v) => v.createdBy !== id)
-          .filter((v) => !used[v.id])
-      );
-      [...designsForMe, ...slogansForMe].forEach((v) => (used[v.id] = true));
-      console.log(`[collectShirts] Sending to player '${id}'...`);
-      console.log(`... designs: ${designsForMe.map((d) => d.id)}`);
-      console.log(`... slogans: ${slogansForMe.map((d) => d.id)}`);
+    const [end, hasEnded] = this.requestInput(
+      () => 'all',
+      (player) => {
+        const { id } = player;
+        const designsForMe = takeDesigns(
+          shuffle(designs)
+            .filter((v) => v.createdBy !== id)
+            .filter((v) => !used[v.id])
+        );
+        const slogansForMe = takeSlogans(
+          shuffle(slogans)
+            .filter((v) => v.createdBy !== id)
+            .filter((v) => !used[v.id])
+        );
 
-      this.options.onCommunicate(id, {
-        type: 'shirt',
-        metadata: {
-          designs: designsForMe,
-          slogans: slogansForMe,
-        },
-      });
-    });
+        [...designsForMe, ...slogansForMe].forEach((v) => (used[v.id] = true));
+        console.log(`[collectShirts] Sending to player '${id}'...`);
+        console.log(`... designs: ${designsForMe.map((d) => d.id)}`);
+        console.log(`... slogans: ${slogansForMe.map((d) => d.id)}`);
 
-    const targetShirts = this.currentRound.shirts.length + this.players.length;
-    for (let i = 1; i <= 45; i++) {
-      this.emitTimer(45 - i);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      // TODO: Emit timer to presenter
-      if (this.currentRound.shirts.length === targetShirts) {
-        return;
+        return {
+          type: 'shirt',
+          metadata: {
+            designs: designsForMe,
+            slogans: slogansForMe,
+          },
+        };
+      },
+      (player, response, allResponses) => {
+        const { designId, sloganId } = response.metadata;
+        const shirt = new Shirt({
+          createdBy: response.sourcePlayerId,
+          design: this.designs.find((d) => d.id === designId)!,
+          slogan: this.slogans.find((s) => s.id === sloganId)!,
+        });
+        console.log(`Received shirt with design: '${designId}' and slogan '${sloganId}'.`);
+        this.currentRound.shirts.push(shirt);
+        if (allResponses.length === this.players.length) {
+          end();
+        }
+        return { type: 'wait', metadata: {} };
       }
-    }
+    );
+
+    await this.defaultTurnTimer(hasEnded, end);
   }
 
   private announceRound = async (roundNumber: number, roundName: string) => {
@@ -670,139 +674,6 @@ export class TKO implements IGame {
     });
     await waitFor(3);
   };
-
-  input(command: IncomingCommand): OutgoingPlayerCommand {
-    console.log(`[${this.gameCode}]: Received command: ${JSON.stringify(command)}`);
-    if (command.type === 'design') {
-      const design = new Design({
-        createdBy: command.sourcePlayerId,
-        base64: command.metadata.base64,
-      });
-      console.log(`Created design: ${JSON.stringify(design, null, 2)}`);
-      this.designs.push(design);
-      this.updateExplainAndWait();
-      return {
-        type: 'wait',
-        metadata: {},
-      };
-    }
-    if (command.type === 'slogan') {
-      const slogan = new Slogan({
-        createdBy: command.sourcePlayerId,
-        text: command.metadata.text,
-      });
-      console.log(`Created slogan: ${JSON.stringify(slogan, null, 2)}`);
-      this.slogans.push(slogan);
-      this.updateExplainAndWait();
-      if (this.repeatCollectSlogan) {
-        return {
-          type: 'slogan',
-          metadata: {},
-        };
-      } else {
-        return {
-          type: 'wait',
-          metadata: {},
-        };
-      }
-    }
-    if (command.type === 'shirt') {
-      const { designId, sloganId } = command.metadata;
-      const shirt = new Shirt({
-        createdBy: command.sourcePlayerId,
-        design: this.designs.find((d) => d.id === designId)!,
-        slogan: this.slogans.find((s) => s.id === sloganId)!,
-      });
-      console.log(`Received shirt with design: '${designId}' and slogan '${sloganId}'.`);
-      this.currentRound.shirts.push(shirt);
-      this.updateExplainAndWait();
-      return {
-        type: 'wait',
-        metadata: {},
-      };
-    }
-    if (command.type === 'score') {
-      const { shirtId, value } = command.metadata;
-      const shirt = this.currentRound.shirts.find((s) => s.id === shirtId)!;
-      // Register shirt score
-      const shirtScore = new ShirtScore({
-        scorerId: command.sourcePlayerId,
-        shirt,
-        value,
-      });
-      // Register adhoc score
-      if (this.designAndAssetBonusesEnabled) {
-        const designScore = new AdhocScore({
-          scorerId: command.sourcePlayerId,
-          targetId: shirt.design.createdBy,
-          value: value / 2,
-          reason: ADHOC_REASON.DESIGN,
-        });
-        const sloganScore = new AdhocScore({
-          scorerId: command.sourcePlayerId,
-          targetId: shirt.slogan.createdBy,
-          value: value / 2,
-          reason: ADHOC_REASON.SLOGAN,
-        });
-
-        console.log(`Registered a design score of '${designScore.value}' for '${designScore.targetId}.`);
-        console.log(`Registered a slogan score of '${sloganScore.value}' for '${sloganScore.targetId}.`);
-        this.currentRound.adhocScores.push(designScore);
-        this.currentRound.adhocScores.push(sloganScore);
-      }
-
-      console.log(`Registered a shirt score of '${shirtScore.value}' for '${shirtScore.shirt.createdBy}.`);
-
-      this.currentRound.shirtScores.push(shirtScore);
-
-      this.updateExplainAndWait();
-
-      return {
-        type: 'wait',
-        metadata: {},
-      };
-    }
-    if (command.type === 'vote') {
-      const { targetId } = command.metadata;
-      const vote = new Vote({
-        scorerId: command.sourcePlayerId,
-        voteFor: this.currentRound.shirts.find((s) => s.id === targetId)!,
-      });
-      console.log(`Player '${vote.scorerId}' voted for '${vote.voteFor.id}'.`);
-      last(this.currentRound.votingRounds)!.push(vote);
-      this.updateExplainAndWait();
-      return {
-        type: 'wait',
-        metadata: {},
-      };
-    }
-
-    throw new Error('Girl, what?');
-  }
-
-  private sendToAllPlayers(payload: OutgoingPlayerCommand) {
-    console.log(`[${this.gameCode}] Sending to all players: ${JSON.stringify(payload)}`);
-    this.players.forEach(({ id }) => {
-      this.options.onCommunicate(id, payload);
-    });
-  }
-
-  private sendStepToAllPresenters(step: PresenterCommandStep, metadata: PresenterCommandStepMetadata) {
-    this.sendToAllPresenters({
-      type: 'step',
-      metadata: {
-        step,
-        metadata,
-      },
-    });
-  }
-
-  private sendToAllPresenters(payload: OutgoingPresenterCommand) {
-    console.log(`[${this.gameCode}] Sending to all presenters: ${JSON.stringify(payload)}`);
-    this.presenters.forEach(({ id }) => {
-      this.options.onCommunicate(id, payload);
-    });
-  }
 }
 
 export class SocketCommunicator {

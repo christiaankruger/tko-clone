@@ -17,7 +17,7 @@ export interface OutgoingPresenterCommand extends CommandBody {
   type: PresenterCommandType;
 }
 
-export type PlayerCommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score' | 'wait';
+export type PlayerCommandType = 'shirt' | 'design' | 'slogan' | 'vote' | 'score' | 'wait' | 'no-op';
 // Same same but all different (todo: find better names)
 export type PresenterCommandType = 'all-players' | 'timer' | 'step' | 'pure-metadata';
 export type PresenterCommandStep = 'round' | 'explain-and-wait' | 'announcement' | 'vs-vote' | 'show-scores';
