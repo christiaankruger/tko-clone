@@ -116,6 +116,10 @@ router.post('/create', (ctx, next) => {
       communicator.send(playerId, command);
     },
   });
+  while (gameMap[game.gameCode]) {
+    // Regenerate room code if it already exists
+    game.gameCode = generateRoomCode();
+  }
   gameMap[game.gameCode] = { game };
 
   console.log(blueBright(`New game created: ${game.gameCode}`));

@@ -1,4 +1,4 @@
-import { IncomingCommand, GameType } from '../../lib/SharedTypes';
+import { IncomingCommand, GameType, OutgoingPlayerCommand } from '../../lib/SharedTypes';
 import { shortId } from './TKOMechanics';
 
 export interface PlayerProps {
@@ -70,6 +70,6 @@ export interface IGame {
   addPresenter: (isCreator?: boolean) => Presenter;
   hasPlayerId: (id: string) => boolean;
   playerByName: (name: string) => Player | undefined;
-  input: (command: IncomingCommand) => void;
+  input: (command: IncomingCommand) => OutgoingPlayerCommand;
   orchestrate: () => Promise<void>;
 }
