@@ -49,7 +49,7 @@ export class Store {
     if (command.type === 'wait') {
       this.goToPage(Pages.WAITING);
     }
-    if (command.type === 'slogan') {
+    if (command.type === 'write') {
       this.goToPage(Pages.WRITE);
     }
     if (command.type === 'shirt') {

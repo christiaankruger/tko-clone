@@ -1,4 +1,3 @@
-import { v4 } from 'uuid';
 import {
   OutgoingPlayerCommand,
   SOCKET_EVENTS,
@@ -8,7 +7,7 @@ import {
   ScoreInfo,
 } from '../../lib/SharedTypes';
 import socketIo from 'socket.io';
-import { Player, IGame, Presenter } from './Game';
+import { Player, Presenter } from './Game';
 import { Design, Slogan, Round, Shirt, ShirtScore, AdhocScore, shortId, Vote } from './TKOMechanics';
 import { shuffle, sample } from '../util';
 import { take, last } from 'ramda';
@@ -109,7 +108,9 @@ export class TKO extends BaseGame {
       adHocBonusesEnabled: true,
     });
 
-    // Round 2
+    /**
+     *    ROUND 2
+     */
     this.newRound();
     await this.announceRound(2, 'Levelling up');
 
@@ -581,7 +582,7 @@ export class TKO extends BaseGame {
   private async collectSlogans(type: 'infinite' | 'single' = 'infinite') {
     const [end, hasEnded] = this.requestInput(
       () => 'all',
-      () => ({ type: 'slogan', metadata: {} }),
+      () => ({ type: 'write', metadata: {} }),
       (player, response, allResponses) => {
         const slogan = new Slogan({
           createdBy: response.sourcePlayerId,
@@ -598,7 +599,7 @@ export class TKO extends BaseGame {
         }
 
         // Type === 'infinite'
-        return { type: 'slogan', metadata: {} };
+        return { type: 'write', metadata: {} };
       }
     );
     await this.defaultTurnTimer(hasEnded, end);
