@@ -15,6 +15,7 @@ import {
 } from '../lib/SharedTypes';
 import { IGame } from './Games/Game';
 import { blue, blueBright, yellowBright } from 'chalk';
+import { Ranker } from './Games/Ranker';
 
 console.log('CWD IS ' + process.cwd());
 
@@ -111,8 +112,9 @@ const io = socketIo.listen(http);
 const communicator = new SocketCommunicator(io);
 
 router.post('/create', (ctx, next) => {
-  const game = new TKO({
+  const game = new Ranker({
     onCommunicate: (playerId, command) => {
+      console.log(`Communicating to ${playerId}: ${JSON.stringify(command, null, 2)}`);
       communicator.send(playerId, command);
     },
   });

@@ -21,6 +21,7 @@ import { dummyShirtOptions } from './dummy';
 import { Score } from './Components/Score/Score';
 import { Vote } from './Components/Vote/Vote';
 import { Post } from '../../frontend-shared/util/API';
+import { Rank } from './Components/Rank/Rank';
 
 const socket = SocketIO();
 const store = new Store();
@@ -40,6 +41,21 @@ export class App extends Component {
   }
 
   private renderPage = () => {
+    if (store.page === Pages.RANK) {
+      const { options, numberToRank } = store.metadata;
+
+      return (
+        <Rank
+          options={options}
+          onSubmit={async (ranked) => {
+            const result = await postCommand('rank', { ranked });
+            store.consumeCommand(result.command);
+          }}
+          numberToRank={numberToRank}
+        />
+      );
+    }
+
     if (store.page === Pages.LOGIN) {
       return (
         <Login

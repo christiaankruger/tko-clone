@@ -431,29 +431,6 @@ export class TKO extends BaseGame {
     }
   };
 
-  private makeAnnouncement = async (
-    options: { heading: string; subtext?: string; shirt?: Shirt },
-    pauseFor?: number
-  ) => {
-    this.sendStepToAllPresenters('announcement', {
-      announcementHeading: options.heading,
-      announcementSubtext: options.subtext || '',
-      announcementShirt: options.shirt || undefined,
-    });
-    if (pauseFor) {
-      await waitFor(pauseFor);
-    }
-  };
-
-  private emitTimer(time: number) {
-    this.sendToAllPresenters({
-      type: 'timer',
-      metadata: {
-        time,
-      },
-    });
-  }
-
   private async showScores(category: string, scores: ScoreInfo[]) {
     this.sendStepToAllPresenters('show-scores', {
       showScoresScores: scores,
@@ -605,17 +582,6 @@ export class TKO extends BaseGame {
     await this.defaultTurnTimer(hasEnded, end);
   }
 
-  private defaultTurnTimer = async (hasEnded: () => boolean, end: () => boolean) => {
-    for (let i = 0; i < DEFAULT_WAITING_TIME; i++) {
-      this.emitTimer(DEFAULT_WAITING_TIME - i);
-      await waitFor(1);
-      if (hasEnded()) {
-        return;
-      }
-    }
-    end();
-  };
-
   private async collectShirts(designs: Design[], slogans: Slogan[]) {
     const used: { [id: string]: boolean } = {};
     const takeDesigns = take(designs.length / this.players.length);
@@ -667,14 +633,6 @@ export class TKO extends BaseGame {
 
     await this.defaultTurnTimer(hasEnded, end);
   }
-
-  private announceRound = async (roundNumber: number, roundName: string) => {
-    this.sendStepToAllPresenters('round', {
-      roundNumber,
-      roundName,
-    });
-    await waitFor(3);
-  };
 }
 
 export class SocketCommunicator {

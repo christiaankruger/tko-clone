@@ -29,6 +29,11 @@ export interface Session {
   responses: IncomingCommand[];
 }
 
+const DEFAULT_WAITING_TIME = 90; // seconds
+export const waitFor = async (second: number) => {
+  await new Promise((resolve) => setTimeout(resolve, second * 1000));
+};
+
 export class BaseGame {
   gameCode: string = generateRoomCode();
   players: Player[] = [];
@@ -85,6 +90,25 @@ export class BaseGame {
     throw new Error(`Implement me`);
   }
 
+  announceRound = async (roundNumber: number, roundName: string) => {
+    this.sendStepToAllPresenters('round', {
+      roundNumber,
+      roundName,
+    });
+    await waitFor(3);
+  };
+
+  makeAnnouncement = async (options: { heading: string; subtext?: string; shirt?: Shirt }, pauseFor?: number) => {
+    this.sendStepToAllPresenters('announcement', {
+      announcementHeading: options.heading,
+      announcementSubtext: options.subtext || '',
+      announcementShirt: options.shirt || undefined,
+    });
+    if (pauseFor) {
+      await waitFor(pauseFor);
+    }
+  };
+
   handleInput(command: IncomingCommand): OutgoingPlayerCommand {
     throw new Error(`Implementation class should implement me pls`);
   }
@@ -135,6 +159,26 @@ export class BaseGame {
       explainStats: [],
     });
     this.updateExplainAndWait();
+  };
+
+  emitTimer(time: number) {
+    this.sendToAllPresenters({
+      type: 'timer',
+      metadata: {
+        time,
+      },
+    });
+  }
+
+  defaultTurnTimer = async (hasEnded: () => boolean, end: () => boolean) => {
+    for (let i = 0; i < DEFAULT_WAITING_TIME; i++) {
+      this.emitTimer(DEFAULT_WAITING_TIME - i);
+      await waitFor(1);
+      if (hasEnded()) {
+        return;
+      }
+    }
+    end();
   };
 
   private updateExplainAndWait = () => {

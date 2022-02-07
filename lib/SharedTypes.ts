@@ -17,7 +17,7 @@ export interface OutgoingPresenterCommand extends CommandBody {
   type: PresenterCommandType;
 }
 
-export type PlayerCommandType = 'shirt' | 'design' | 'write' | 'vote' | 'score' | 'wait' | 'no-op';
+export type PlayerCommandType = 'shirt' | 'design' | 'write' | 'vote' | 'score' | 'wait' | 'no-op' | 'rank';
 // Same same but all different (todo: find better names)
 export type PresenterCommandType = 'all-players' | 'timer' | 'step' | 'pure-metadata';
 export type PresenterCommandStep = 'round' | 'explain-and-wait' | 'announcement' | 'vs-vote' | 'show-scores';
@@ -59,7 +59,7 @@ export type StepPresenterCommandMetadata = {
   metadata: PresenterCommandStepMetadata;
 };
 
-export type GameType = 'tko'; // More to follow.
+export type GameType = 'tko' | 'ranker'; // More to follow.
 
 export enum SOCKET_EVENTS {
   COMMAND = 'command',

@@ -9,6 +9,7 @@ export enum Pages {
   COMPOSE = 'compose',
   SCORE = 'score',
   VOTE = 'vote',
+  RANK = 'rank',
 }
 
 export interface GameDetails {
@@ -41,6 +42,9 @@ export class Store {
 
   @action
   consumeCommand(command: OutgoingPlayerCommand) {
+    console.log('Consuming command');
+    console.table(command);
+
     this.metadata = command.metadata;
 
     if (command.type === 'design') {
@@ -60,6 +64,9 @@ export class Store {
     }
     if (command.type === 'vote') {
       this.goToPage(Pages.VOTE);
+    }
+    if (command.type === 'rank') {
+      this.goToPage(Pages.RANK);
     }
   }
 }
