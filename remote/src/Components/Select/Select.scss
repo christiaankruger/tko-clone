@@ -1,0 +1,28 @@
+.jcr-select {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  > * {
+    margin-bottom: 16px;
+  }
+
+  &__item {
+    padding: 8px;
+    border: 1px solid gray;
+    border-radius: 2px;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    &:not(:last-child) {
+      margin-bottom: 8px;
+    }
+  }
+
+  &__list {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+}

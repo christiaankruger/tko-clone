@@ -170,9 +170,9 @@ export class BaseGame {
     });
   }
 
-  defaultTurnTimer = async (hasEnded: () => boolean, end: () => boolean) => {
-    for (let i = 0; i < DEFAULT_WAITING_TIME; i++) {
-      this.emitTimer(DEFAULT_WAITING_TIME - i);
+  defaultTurnTimer = async (hasEnded: () => boolean, end: () => boolean, time = DEFAULT_WAITING_TIME) => {
+    for (let i = 0; i < time; i++) {
+      this.emitTimer(time - i);
       await waitFor(1);
       if (hasEnded()) {
         return;

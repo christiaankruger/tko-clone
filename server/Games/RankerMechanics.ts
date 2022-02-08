@@ -24,9 +24,9 @@ export class List {
 export class RankableItem {
   id: string = shortId('rankable-item');
   title: string;
-  submittedBy: string;
+  // submittedBy: string;
 
-  constructor(props: { title: string; submittedBy: string }) {
+  constructor(props: { title: string }) {
     Object.assign(this, props);
   }
 }
@@ -74,3 +74,14 @@ export const scoreRankings = (rankings: ItemRanking[]): { id: string; score: num
       return b.score - a.score;
     });
 };
+
+export class Score {
+  id: string = shortId('score');
+  scorerId!: string;
+  value!: number;
+  reason!: string;
+
+  constructor(props: { scorerId: string; value: number; reason: string }) {
+    Object.assign(this, props);
+  }
+}

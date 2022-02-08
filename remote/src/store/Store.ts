@@ -10,6 +10,7 @@ export enum Pages {
   SCORE = 'score',
   VOTE = 'vote',
   RANK = 'rank',
+  SELECT = 'select',
 }
 
 export interface GameDetails {
@@ -49,6 +50,9 @@ export class Store {
 
     if (command.type === 'design') {
       this.goToPage(Pages.DRAW);
+    }
+    if (command.type === 'select') {
+      this.goToPage(Pages.SELECT);
     }
     if (command.type === 'wait') {
       this.goToPage(Pages.WAITING);

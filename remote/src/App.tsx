@@ -22,6 +22,7 @@ import { Score } from './Components/Score/Score';
 import { Vote } from './Components/Vote/Vote';
 import { Post } from '../../frontend-shared/util/API';
 import { Rank } from './Components/Rank/Rank';
+import { Select } from './Components/Select/Select';
 
 const socket = SocketIO();
 const store = new Store();
@@ -52,6 +53,21 @@ export class App extends Component {
             store.consumeCommand(result.command);
           }}
           numberToRank={numberToRank}
+        />
+      );
+    }
+
+    if (store.page === Pages.SELECT) {
+      const { options, numberToSelect } = store.metadata;
+
+      return (
+        <Select
+          options={options}
+          onSubmit={async (selected) => {
+            const result = await postCommand('select', { selected });
+            store.consumeCommand(result.command);
+          }}
+          numberToSelect={numberToSelect}
         />
       );
     }
