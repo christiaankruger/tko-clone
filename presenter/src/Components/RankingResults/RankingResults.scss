@@ -1,0 +1,64 @@
+.jcp-ranking-result {
+  width: 50%;
+  height: 50%;
+  overflow-y: auto;
+  padding: 48px;
+
+  display: flex;
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  background-color: white;
+  border: 1px solid lightgray;
+  border-radius: 2px;
+
+  &__list-item {
+    border-radius: 2px;
+    border: 1px solid gray;
+    padding: 8px;
+    &:not(:last-child) {
+      margin-bottom: 8px;
+    }
+  }
+
+  &__container {
+    margin-top: 36px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    justify-content: space-between;
+  }
+
+  &__player-result {
+    &:not(:last-child) {
+      margin-bottom: 12px;
+    }
+  }
+
+  &__player-name {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  &__result-block-container {
+    display: flex;
+    gap: 8px;
+  }
+
+  &__result-block {
+    width: 24px;
+    height: 24px;
+    border-radius: 2px;
+    &--correct {
+      background-color: green;
+    }
+    &--misplaced {
+      background-color: orange;
+    }
+    &--incorrect {
+      background-color: red;
+    }
+  }
+}

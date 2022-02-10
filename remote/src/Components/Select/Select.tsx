@@ -54,7 +54,7 @@ export class Select extends Component<SelectProps> {
         <Heading>Select</Heading>
         <div className={BEM('list')}>
           {this.props.options.map((option) => {
-            const selected = this.selectArray.findIndex(equals(option.id)) !== -1;
+            const selected = this.selectArray.findIndex((x) => x === option.id) !== -1;
 
             return (
               <div className={BEM('item')} onClick={() => this.tapItem(option.id)}>
@@ -71,11 +71,11 @@ export class Select extends Component<SelectProps> {
   }
 
   @action
-  private submit = () => {
+  private submit = async () => {
     if (this.selectArray.length !== this.props.numberToSelect) {
       return;
     }
 
-    this.props.onSubmit(this.selectArray.map((x) => ({ id: x })));
+    await this.props.onSubmit(this.selectArray.map((x) => ({ id: x })));
   };
 }

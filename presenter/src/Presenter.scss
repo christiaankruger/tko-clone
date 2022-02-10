@@ -21,3 +21,22 @@ body {
     font-family: 'Open Sans' !important;
   }
 }
+
+.score-added-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-added-name {
+}
+
+.score-added-score {
+  // background-color: blue;
+  color: blue;
+  font-weight: bold;
+  text-align: center;
+  // padding: 12px;
+  // border-radius: 2px;
+  // font-size: 12px;
+}

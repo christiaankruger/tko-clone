@@ -15,7 +15,8 @@ export const Post = async <T>(url: string, body: object) => {
    */
   if (matchLastSent(url, body)) {
     // Probably a double send, ignore.
-    return;
+    console.log('Ignoring matchLastSent for ', url, body);
+    // return;
   }
 
   lastSent = { url, body };

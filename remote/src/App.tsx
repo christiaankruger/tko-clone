@@ -65,6 +65,7 @@ export class App extends Component {
           options={options}
           onSubmit={async (selected) => {
             const result = await postCommand('select', { selected });
+            console.log('Select result', result);
             store.consumeCommand(result.command);
           }}
           numberToSelect={numberToSelect}

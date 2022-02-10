@@ -3,6 +3,7 @@ import { render } from 'react-dom';
 import { observer } from 'mobx-react';
 import SocketIO from 'socket.io-client';
 import { Alert, AlertTitle } from '@material-ui/lab';
+import { ToastContainer, toast } from 'react-toastify';
 
 import './Presenter.scss';
 import { Store, Pages } from './store/Store';
@@ -16,6 +17,9 @@ import { ExplainAndWait } from './Components/ExplainAndWait/ExplainAndWait';
 import { Announcement } from './Components/Announcement/Announcement';
 import { VSVote } from './Components/VSVote/VSVote';
 import { ShowScores } from './Components/ShowScores/ShowScores';
+import { RankingResult } from './Components/RankingResults/RankingResults';
+
+import 'react-toastify/dist/ReactToastify.css';
 
 const socket = SocketIO();
 const store = new Store();
@@ -24,7 +28,20 @@ const store = new Store();
 (window as any).POST = Post;
 (window as any).store = store;
 
+const PlayerScoreAdded = ({ name, scoreAdded }) => (
+  <div className="score-added-container">
+    <div className="score-added-score">+ {scoreAdded}</div>
+    <div className="score-added-name">{name}</div>
+  </div>
+);
+
 socket.on(SOCKET_EVENTS.COMMAND, (command: OutgoingPresenterCommand) => {
+  if (command.type === 'score-added') {
+    const { name, value } = command.metadata;
+    toast(<PlayerScoreAdded name={name} scoreAdded={value} />, { icon: '🚀' });
+    return;
+  }
+
   store.consumeCommand(command);
 });
 
@@ -32,29 +49,38 @@ socket.on(SOCKET_EVENTS.COMMAND, (command: OutgoingPresenterCommand) => {
 export class Presenter extends Component {
   render() {
     return (
-      <Suspense fallback={<div>Loading...</div>}>
-        {store.load
-          ? store.load.case({
-              pending: this.renderPage,
-              fulfilled: this.renderPage,
-              rejected: (e) => {
-                return (
-                  <>
-                    <Alert severity="error">
-                      <AlertTitle>Mayday!</AlertTitle>
-                      {e.message}
-                    </Alert>
-                    {this.renderPage()}
-                  </>
-                );
-              },
-            })
-          : this.renderPage()}
-      </Suspense>
+      <>
+        <ToastContainer draggable={false} limit={5} autoClose={2000} />
+        <Suspense fallback={<div>Loading...</div>}>
+          {store.load
+            ? store.load.case({
+                pending: this.renderPage,
+                fulfilled: this.renderPage,
+                rejected: (e) => {
+                  return (
+                    <>
+                      <Alert severity="error">
+                        <AlertTitle>Mayday!</AlertTitle>
+                        {e.message}
+                      </Alert>
+                      {this.renderPage()}
+                    </>
+                  );
+                },
+              })
+            : this.renderPage()}
+        </Suspense>
+      </>
     );
   }
 
   private renderPage = () => {
+    if (store.currentPage === Pages.RANKING_RESULT) {
+      return (
+        <RankingResult correctRanking={store.metadata.correctRanking!} playerResults={store.metadata.playerResults!} />
+      );
+    }
+
     if (store.currentPage === Pages.LANDING) {
       return (
         <Landing

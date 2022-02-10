@@ -19,6 +19,7 @@ export enum Pages {
   ANNOUNCEMENT = 'announcement',
   VS_VOTE = 'vs-vote',
   SHOW_SCORES = 'show-scores',
+  RANKING_RESULT = 'ranking-result',
 }
 
 export class Store {
@@ -82,6 +83,9 @@ export class Store {
       }
       if (step === 'show-scores') {
         this.goToPage(Pages.SHOW_SCORES);
+      }
+      if (step === 'ranking-result') {
+        this.goToPage(Pages.RANKING_RESULT);
       }
     }
     if (command.type === 'pure-metadata') {

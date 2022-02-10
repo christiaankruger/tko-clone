@@ -19,8 +19,14 @@ export interface OutgoingPresenterCommand extends CommandBody {
 
 export type PlayerCommandType = 'shirt' | 'design' | 'write' | 'vote' | 'score' | 'wait' | 'no-op' | 'rank' | 'select';
 // Same same but all different (todo: find better names)
-export type PresenterCommandType = 'all-players' | 'timer' | 'step' | 'pure-metadata';
-export type PresenterCommandStep = 'round' | 'explain-and-wait' | 'announcement' | 'vs-vote' | 'show-scores';
+export type PresenterCommandType = 'all-players' | 'timer' | 'step' | 'pure-metadata' | 'score-added';
+export type PresenterCommandStep =
+  | 'round'
+  | 'explain-and-wait'
+  | 'announcement'
+  | 'vs-vote'
+  | 'show-scores'
+  | 'ranking-result';
 export type VSVoteResult = {
   forShirtId: string;
   voterName: string;
@@ -35,6 +41,15 @@ export type ScoreInfo = {
 export type PresenterCommandStepMetadata = Partial<{
   roundNumber: number;
   roundName: string;
+
+  correctRanking: {
+    text: string;
+  }[];
+  playerResults: {
+    name: string;
+    score: number;
+    summary: string[];
+  }[];
 
   explainText: {
     heading: string;

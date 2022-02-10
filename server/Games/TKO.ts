@@ -431,14 +431,6 @@ export class TKO extends BaseGame {
     }
   };
 
-  private async showScores(category: string, scores: ScoreInfo[]) {
-    this.sendStepToAllPresenters('show-scores', {
-      showScoresScores: scores,
-      showScoresCategory: category,
-    });
-    await waitFor(10);
-  }
-
   private async collectVotesBetween(shirts: Shirt[]) {
     this.currentRound.votingRounds.push([]);
 

@@ -1,24 +1,87 @@
 import { stringifyKey } from 'mobx/lib/internal';
-import { last, pick, prop, range, uniq, uniqBy, without } from 'ramda';
-import { GameType } from '../../lib/SharedTypes';
+import { flatten, groupBy, last, pick, prop, range, take, uniq, uniqBy, without } from 'ramda';
+import { GameType, ScoreInfo } from '../../lib/SharedTypes';
 import { sample, shuffle } from '../util';
 import { BaseGame, waitFor } from './BaseGame';
 import { Player } from './Game';
-import { ItemRanking, List, RankableItem, Score, scoreRankings } from './RankerMechanics';
+import {
+  evaluateSets,
+  EvaluateSetsResult,
+  ItemRanking,
+  List,
+  RankableItem,
+  Score,
+  scoreRankings,
+} from './RankerMechanics';
+
+class RoundScoreContainer {
+  private notificationsQueue: { id: string; value: number }[] = [];
+
+  constructor(private onScoreAdded: (scorerId: string, value: number) => void) {}
+
+  scores: Score[] = [];
+  private notificationsPaused: boolean = false;
+
+  scoreForPlayerId(id: string): number {
+    return this.scores
+      .filter((x) => x.scorerId === id)
+      .map(prop('value'))
+      .reduce((memo, x) => memo + x, 0);
+  }
+
+  pauseNotifications() {
+    this.notificationsPaused = true;
+  }
+
+  unpauseNotifications() {
+    this.notificationsPaused = false;
+    while (this.notificationsQueue.length > 0) {
+      const { id, value } = this.notificationsQueue.pop();
+      this.onScoreAdded(id, value);
+    }
+  }
+
+  push(score: Score) {
+    this.scores.push(score);
+    if (this.notificationsPaused) {
+      this.notificationsQueue.push({ id: score.scorerId, value: score.value });
+    } else {
+      this.onScoreAdded(score.scorerId, score.value);
+    }
+  }
+}
 
 export class Ranker extends BaseGame {
   gameType: GameType = 'ranker';
+  allRoundScores: RoundScoreContainer[] = [];
 
   async orchestrate(): Promise<void> {
     await this.round(1);
-    // await this.round(2);
+    await this.round(2);
+    this.showScores(
+      'Overall scores so far!',
+      this.players.map(({ id, name }) => {
+        const value = this.allRoundScores
+          .map((roundScore) => roundScore.scoreForPlayerId(id))
+          .reduce((memo, x) => memo + x);
+
+        return {
+          name,
+          value,
+        };
+      })
+    );
     // await this.round(3);
   }
 
   private async round(roundNumber: number) {
     const listSuggestions: List[] = [];
     const listSuggestionRanks: ItemRanking[] = [];
-    const roundScores: Score[] = [];
+    const roundScores = new RoundScoreContainer((scorerId, value) => {
+      const playerName = this.playerById(scorerId).name;
+      this.showScoreAdded(playerName, value);
+    });
+    this.allRoundScores.push(roundScores);
 
     await this.announceRound(roundNumber, sample(['The strike']));
     this.explainAndWait(
@@ -135,7 +198,7 @@ export class Ranker extends BaseGame {
     // Get  suggestions from everyone
     const suggestions = await (async () => {
       const NUMBER_TO_SUGGEST = 2;
-      const suggestions: { text: string; submittedBy: string }[] = [];
+      const suggestions: { text: string; submittedBy: string[] }[] = [];
       this.explainAndWait(
         {
           heading: `Time to gather list items for ${listSuggestionWinner.title}`,
@@ -143,7 +206,7 @@ export class Ranker extends BaseGame {
         },
         () => {
           return this.players.map((player) => {
-            const count = suggestions.filter((d) => d.submittedBy === player.id).length;
+            const count = suggestions.filter((d) => d.submittedBy.includes(player.id)).length;
             return {
               player,
               status: count,
@@ -158,8 +221,15 @@ export class Ranker extends BaseGame {
           return { type: 'write', metadata: {} };
         },
         (player, response, allResponses) => {
-          suggestions.push({ text: response.metadata.text.toLowerCase().trim(), submittedBy: player.id });
-          const numberSubmitted = suggestions.filter((x) => x.submittedBy === player.id).length;
+          const formattedText = response.metadata.text.toLowerCase().trim();
+          const indexOfExisting = suggestions.findIndex((s) => s.text === formattedText);
+          if (indexOfExisting === -1) {
+            suggestions.push({ text: formattedText, submittedBy: [player.id] });
+          } else {
+            suggestions[indexOfExisting].submittedBy.push(player.id);
+          }
+
+          const numberSubmitted = suggestions.filter((x) => x.submittedBy.includes(player.id)).length;
           if (numberSubmitted < NUMBER_TO_SUGGEST) {
             return { type: 'write', metadata: {} };
           }
@@ -172,10 +242,10 @@ export class Ranker extends BaseGame {
       );
 
       await this.defaultTurnTimer(hasEnded, end);
-      return uniq(shuffle(suggestions.map(prop('text'))));
+      return shuffle(suggestions);
     })();
-    suggestions.forEach((title) => {
-      listSuggestionWinner.addItem(new RankableItem({ title }));
+    suggestions.forEach(({ text, submittedBy }) => {
+      listSuggestionWinner.addItem(new RankableItem({ title: text, submittedBy }));
     });
     const numberToRank = Math.min(5, listSuggestionWinner.items.length);
 
@@ -258,6 +328,7 @@ export class Ranker extends BaseGame {
           const correctAnswerId = individualRanks[spotlightPlayer.id][index].targetId;
           const correctAnswer = listSuggestionWinner.items.find((x) => x.id === correctAnswerId);
           const scorers: string[] = [];
+          const answeredPlayerIds: string[] = [];
 
           this.explainAndWait(
             {
@@ -267,7 +338,12 @@ export class Ranker extends BaseGame {
               } choice would be? You can pick two options. You'll score if one of two options is correct`,
             },
             () => {
-              return [];
+              return this.players.map((player) => {
+                return {
+                  player,
+                  status: answeredPlayerIds.includes(player.id) ? '2' : '0',
+                };
+              });
             }
           );
           const [end, hasEnded] = this.requestInput(
@@ -278,7 +354,8 @@ export class Ranker extends BaseGame {
               return { type: 'select', metadata: { options, numberToSelect: 2 } };
             },
             (player, response, allResponses) => {
-              const { selected }: { selected: { text: string; id: string }[] } = response.metadata;
+              const { selected }: { selected: { id: string }[] } = response.metadata;
+              answeredPlayerIds.push(player.id);
 
               for (const choice of selected) {
                 if (choice.id === correctAnswerId) {
@@ -298,12 +375,104 @@ export class Ranker extends BaseGame {
           await this.defaultTurnTimer(hasEnded, end, 120);
           await this.makeAnnouncement({ heading: 'And of course the answer is...', subtext: '(Drum roll please)' }, 3);
           await this.makeAnnouncement(
-            { heading: correctAnswer.title, subtext: `Congrats to: ${scorers.join(', ')}` },
+            {
+              heading: correctAnswer.title,
+              subtext: scorers.length !== 0 ? `Congrats to: ${scorers.join(', ')}` : 'Woops, nobody knew that!',
+            },
             3
           );
         }
       }
-      await waitFor(1000);
+      await this.makeAnnouncement({ heading: "Let's see those scores!" }, 3);
+      const scores = this.players.map(({ id, name }) => {
+        return {
+          name,
+          value: roundScores.scoreForPlayerId(id),
+        };
+      });
+      await this.showScores(`Individual ranks`, scores);
+    })();
+    await (async () => {
+      // Overall ranks
+      const finalRankSummaries: { name: string; score: number; summary: string[] }[] = [];
+      const allRankings = flatten(Object.values(individualRanks));
+      const scores = scoreRankings(allRankings);
+      const correctOrderIds = take(numberToRank)(scores.map((s) => ({ targetId: s.id })));
+      await this.makeAnnouncement({ heading: `Time to figure out the group's ranked items` }, 3);
+      this.explainAndWait(
+        { heading: `Rank the top ${numberToRank} overall items`, explainer: "You'll figure it out!" },
+        () => {
+          return this.players.map((player) => {
+            return {
+              player,
+              status: finalRankSummaries.findIndex((x) => x.name === player.name) !== -1 ? 'Done' : 'Waiting',
+            };
+          });
+        }
+      );
+      const [end, hasEnded] = this.requestInput(
+        () => 'all',
+        () => {
+          return {
+            type: 'rank',
+            metadata: {
+              numberToRank,
+              options: shuffle(listSuggestionWinner.items).map((i) => ({ id: i.id, text: i.title })),
+            },
+          };
+        },
+        (player, response, allResponses) => {
+          const { ranked }: { ranked: { id: string }[] } = response.metadata;
+          const selectedIds = ranked.map((r) => ({ targetId: r.id }));
+          const { score, summary } = evaluateSets(correctOrderIds, selectedIds);
+
+          roundScores.push(new Score({ scorerId: player.id, value: score, reason: 'Group rankings' }));
+          finalRankSummaries.push({ name: player.name, score, summary });
+
+          if (allResponses.length === this.players.length) {
+            end();
+          }
+
+          return { type: 'wait', metadata: {} };
+        }
+      );
+      await this.defaultTurnTimer(hasEnded, end);
+      const correctRanking = correctOrderIds
+        .map(prop('targetId'))
+        .map((id) => listSuggestionWinner.itemById(id))
+        .map((x) => ({
+          text: x.title,
+        }));
+
+      this.showRankingResults(correctRanking, finalRankSummaries);
+      await waitFor(10);
+      for (let i = 0; i < correctOrderIds.length; i++) {
+        const multiplier = correctOrderIds.length - i;
+        const baseScore = 50;
+        const item = listSuggestionWinner.itemById(correctOrderIds[i].targetId);
+        const playersWhoSubmittedThis = item.submittedBy.map((id) => this.playerById(id));
+
+        for (const player of playersWhoSubmittedThis) {
+          roundScores.push(new Score({ scorerId: player.id, value: baseScore * multiplier, reason: 'Bonus points' }));
+        }
+      }
+      await this.makeAnnouncement(
+        {
+          heading: 'Bonus points!',
+          subtext: 'You get extra points for how well your submissions did in the group rankings',
+        },
+        10
+      );
+
+      await this.showScores(
+        `Round ${roundNumber} scores!`,
+        this.players.map(({ id, name }) => {
+          return {
+            name,
+            value: roundScores.scoreForPlayerId(id),
+          };
+        })
+      );
     })();
   }
 }

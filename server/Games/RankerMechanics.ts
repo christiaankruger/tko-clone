@@ -1,4 +1,4 @@
-import { divide, groupBy, prop, sum } from 'ramda';
+import { divide, equals, groupBy, prop, sum } from 'ramda';
 import { v4 } from 'uuid';
 import { Player } from './Game';
 
@@ -11,22 +11,28 @@ export class List {
   title: string;
   items: RankableItem[] = [];
   submittedBy: string;
+  itemToIdMap: { [key: string]: RankableItem } = {};
 
   constructor(props: { title: string; submittedBy: string }) {
     Object.assign(this, props);
   }
 
   addItem(item: RankableItem) {
+    this.itemToIdMap[item.id] = item;
     this.items.push(item);
+  }
+
+  itemById(id: string): RankableItem {
+    return this.itemToIdMap[id];
   }
 }
 
 export class RankableItem {
   id: string = shortId('rankable-item');
   title: string;
-  // submittedBy: string;
+  submittedBy: string[] = [];
 
-  constructor(props: { title: string }) {
+  constructor(props: { title: string; submittedBy: string[] }) {
     Object.assign(this, props);
   }
 }
@@ -73,6 +79,32 @@ export const scoreRankings = (rankings: ItemRanking[]): { id: string; score: num
     .sort((a, b) => {
       return b.score - a.score;
     });
+};
+
+export type EvaluateSetsResult = { score: number; summary: ('correct' | 'misplaced' | 'incorrect')[] };
+export const evaluateSets = (correct: { targetId: string }[], supplied: { targetId: string }[]): EvaluateSetsResult => {
+  const scorePerCorrectInclusion = 75;
+  const scorePerCorrectPosition = 150;
+
+  let score = 0;
+  const summary = correct.map(({ targetId }, index) => {
+    const indexInSupplied = supplied.findIndex((x) => x.targetId === targetId);
+    if (indexInSupplied === -1) {
+      return 'incorrect' as 'incorrect';
+    }
+    if (indexInSupplied === index) {
+      score += scorePerCorrectInclusion + scorePerCorrectPosition;
+      return 'correct' as 'correct';
+    } else {
+      score += scorePerCorrectInclusion;
+      return 'misplaced' as 'misplaced';
+    }
+  });
+
+  return {
+    score,
+    summary,
+  };
 };
 
 export class Score {

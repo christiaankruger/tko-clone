@@ -8,6 +8,7 @@ import {
   OutgoingPresenterCommand,
   PresenterCommandStep,
   PresenterCommandStepMetadata,
+  ScoreInfo,
 } from '../../lib/SharedTypes';
 
 export type OnCommunicateType = (playerId: string, payload: OutgoingPlayerCommand | OutgoingPresenterCommand) => void;
@@ -62,6 +63,10 @@ export class BaseGame {
     return presenter;
   }
 
+  playerById(id: string): Player | undefined {
+    return this.players.find((p) => p.id === id);
+  }
+
   playerByName(name: string): Player | undefined {
     return this.players.find((p) => p.name === name);
   }
@@ -89,6 +94,32 @@ export class BaseGame {
   async orchestrate(): Promise<void> {
     throw new Error(`Implement me`);
   }
+
+  async showScores(category: string, scores: ScoreInfo[]) {
+    this.sendStepToAllPresenters('show-scores', {
+      showScoresScores: scores,
+      showScoresCategory: category,
+    });
+    await waitFor(10);
+  }
+
+  showScoreAdded = (name: string, value: number) => {
+    this.sendToAllPresenters({ type: 'score-added', metadata: { name, value } });
+  };
+
+  showRankingResults = (
+    correctRanking: { text: string }[],
+    playerResults: {
+      name: string;
+      score: number;
+      summary: string[];
+    }[]
+  ) => {
+    this.sendStepToAllPresenters('ranking-result', {
+      correctRanking,
+      playerResults,
+    });
+  };
 
   announceRound = async (roundNumber: number, roundName: string) => {
     this.sendStepToAllPresenters('round', {
